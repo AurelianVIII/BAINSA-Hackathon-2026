@@ -18,20 +18,35 @@ const FETCH_TIMEOUT_MS = 4000;
 export async function fetchCatchUp(
   items: TranscriptItem[] | undefined,
   start: number,
-  end: number
+  end: number,
+  title?: string
 ): Promise<CatchUpResult> {
-  const local = generateCatchUp(items ?? transcript, start, end);
+  const local = generateCatchUp(items ?? transcript, start, end, title);
   if (local.bullets.length === 0) return local;
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
-  const windowItems = items?.filter((item) => item.end > start && item.start < end);
+  const safeStart = Math.max(0, start);
+  const safeEnd = Math.max(safeStart + 1, end);
+  let windowItems = items?.filter((item) => item.end > safeStart && item.start < safeEnd);
+
+  if (items && (!windowItems || windowItems.length === 0)) {
+    windowItems = items.filter((item) => item.end > safeStart - 30 && item.start < safeEnd + 30);
+    if (!windowItems || windowItems.length === 0) {
+      windowItems = items.slice(0, 3);
+    }
+  }
 
   try {
     const response = await fetch("/api/catchup", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(windowItems ? { start, end, items: windowItems } : { start, end }),
+      body: JSON.stringify({
+        start: safeStart,
+        end: safeEnd,
+        items: windowItems ?? undefined,
+        title,
+      }),
       signal: controller.signal,
     });
     if (!response.ok) return local;

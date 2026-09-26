@@ -49,16 +49,28 @@ export function KeyMoments({
   onRequestSummary?: (window: MissedWindow) => void;
 }) {
   const keyItems = items.filter((item) => item.importance === "high");
-  const byTopic = groupByTopic(keyItems);
+  const displayItems =
+    keyItems.length > 0
+      ? keyItems
+      : items.length > 0
+        ? items.filter((_, idx) => idx === 0 || idx % 2 === 0)
+        : [];
+  const byTopic = groupByTopic(displayItems);
+  const topicEntries = Object.entries(byTopic);
 
   return (
     <Card title="Key moments" className="max-h-80 overflow-y-auto">
-      <div className="flex flex-col gap-3">
-        {Object.entries(byTopic).map(([topic, topicItems]) => (
-          <div key={topic}>
-            <h3 className="mb-1 text-xs font-semibold text-zinc-400 dark:text-zinc-500">
-              {topic}
-            </h3>
+      {topicEntries.length === 0 ? (
+        <p className="py-6 text-center text-sm text-zinc-500 dark:text-zinc-400">
+          Key moments will appear as the lesson progresses.
+        </p>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {topicEntries.map(([topic, topicItems]) => (
+            <div key={topic}>
+              <h3 className="mb-1 text-xs font-semibold text-zinc-400 dark:text-zinc-500">
+                {topic}
+              </h3>
             <ul className="flex flex-col gap-1">
               {topicItems.map((item) => {
                 const isActive =
@@ -102,9 +114,10 @@ export function KeyMoments({
                 );
               })}
             </ul>
-          </div>
-        ))}
-      </div>
+            </div>
+          ))}
+        </div>
+      )}
     </Card>
   );
 }

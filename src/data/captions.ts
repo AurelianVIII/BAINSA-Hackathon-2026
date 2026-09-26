@@ -98,10 +98,24 @@ export function buildCaptions(items: TranscriptItem[]): CaptionChunk[] {
 /** Captions for the built-in demo lesson. */
 export const captions: CaptionChunk[] = buildCaptions(transcript);
 
-/** The caption visible at `time`, or null in a gap between chunks. */
+/** The caption visible at `time`, with sub-second smoothing to prevent flicker between adjacent phrases. */
 export function getCaptionAt(
   chunks: CaptionChunk[],
   time: number
 ): CaptionChunk | null {
-  return chunks.find((chunk) => time >= chunk.start && time < chunk.end) ?? null;
+  const exact = chunks.find((chunk) => time >= chunk.start && time < chunk.end);
+  if (exact) return exact;
+
+  // Smoothing bridge: hold previous caption for up to 0.6s into a silence
+  // rather than flickering the caption box away for a fraction of a second.
+  for (let i = 0; i < chunks.length; i++) {
+    const chunk = chunks[i];
+    const next = chunks[i + 1];
+    const bridgeLimit = next ? Math.min(chunk.end + 0.6, next.start) : chunk.end + 0.6;
+    if (time >= chunk.start && time < bridgeLimit) {
+      return chunk;
+    }
+  }
+
+  return null;
 }

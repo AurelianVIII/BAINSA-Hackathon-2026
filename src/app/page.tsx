@@ -494,11 +494,25 @@ export default function Home() {
           <AiSummaryPanel
             request={summaryRequest}
             items={isDemoLesson ? undefined : activeTranscript}
+            lessonTitle={
+              isLiveLesson
+                ? "Live Transcribed Lesson"
+                : isYouTube
+                  ? (youtubeMeta?.title ?? "YouTube Video")
+                  : LESSON_TITLE
+            }
           />
 
           <CatchUpButton
             currentTime={currentTime}
             items={isDemoLesson ? undefined : activeTranscript}
+            title={
+              isLiveLesson
+                ? "Live Transcribed Lesson"
+                : isYouTube
+                  ? (youtubeMeta?.title ?? "YouTube Video")
+                  : LESSON_TITLE
+            }
           />
 
           <AwayCatchUp

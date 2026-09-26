@@ -422,7 +422,7 @@ export function VideoPanel({
           <div className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center px-4">
             {caption ? (
               <div className="max-w-2xl rounded-lg bg-black/85 px-4 py-2 text-center shadow-xl backdrop-blur-sm transition-all duration-150">
-                <p className="line-clamp-2 text-sm font-medium leading-snug text-white drop-shadow sm:text-base md:text-lg">
+                <p className="text-sm font-medium leading-snug text-white drop-shadow sm:text-base md:text-lg">
                   {caption.text}
                 </p>
               </div>

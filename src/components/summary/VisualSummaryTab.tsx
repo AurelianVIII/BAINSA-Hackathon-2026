@@ -29,9 +29,19 @@ export function VisualSummaryTab({
 }) {
   const byTopic = groupByTopic(items);
 
+  const entries = Object.entries(byTopic);
+
+  if (entries.length === 0) {
+    return (
+      <div className="py-6 text-center text-sm text-zinc-500 dark:text-zinc-400">
+        Topic summaries will appear as the lesson progresses.
+      </div>
+    );
+  }
+
   return (
     <ul className="flex flex-col gap-2">
-      {Object.entries(byTopic).map(([topic, topicItems]) => {
+      {entries.map(([topic, topicItems]) => {
         const start = Math.min(...topicItems.map((item) => item.start));
         const end = Math.max(...topicItems.map((item) => item.end));
         const isActive = currentTime >= start && currentTime < end;
@@ -55,7 +65,7 @@ export function VisualSummaryTab({
                 </span>
               </div>
               <p className="mt-1 text-xs leading-relaxed text-zinc-500 dark:text-zinc-400">
-                {getTopicGist(topic)}
+                {getTopicGist(topic, topicItems)}
               </p>
             </button>
           </li>

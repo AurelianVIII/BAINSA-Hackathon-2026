@@ -13,9 +13,11 @@ import type { CatchUpResult, TranscriptItem } from "@/types";
 export function CatchUpButton({
   currentTime,
   items,
+  title,
 }: {
   currentTime: number;
   items?: TranscriptItem[];
+  title?: string;
 }) {
   const [result, setResult] = useState<CatchUpResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -23,7 +25,7 @@ export function CatchUpButton({
   const handleClick = async () => {
     setIsLoading(true);
     try {
-      setResult(await fetchCatchUp(items, currentTime - 60, currentTime));
+      setResult(await fetchCatchUp(items, currentTime - 60, currentTime, title));
     } finally {
       setIsLoading(false);
     }
@@ -57,6 +59,11 @@ export function CatchUpButton({
               <li key={i}>{bullet}</li>
             ))}
           </ul>
+          {result.bridge && (
+            <p className="mt-2 text-xs italic text-zinc-500 dark:text-zinc-400">
+              {result.bridge}
+            </p>
+          )}
         </div>
       )}
     </Card>

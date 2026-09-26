@@ -1,38 +1,47 @@
 import type { AttentionEvent, CatchUpResult, TranscriptItem } from "@/types";
 import type { MissedWindow } from "./types";
 
-const MAX_BULLETS = 3;
 const MERGE_GAP_SECONDS = 5;
 const PENDING_ALERT_WINDOW_SECONDS = 8;
+
+import { generateSmartCatchUp } from "@/lib/ai/smart-summarizer";
 
 /**
  * Owned by the Catch-up feature team.
  *
- * Condensed summary: first clause of each missed line, capped at
- * `MAX_BULLETS`, plus the highest-importance line as the key idea.
+ * Condensed summary: clean, plain-language bullets capped at `MAX_BULLETS`,
+ * plus the highest-importance line or central concept as the key idea.
  */
 export function generateCatchUp(
   transcriptItems: TranscriptItem[],
   fromTime: number,
-  toTime: number
+  toTime: number,
+  lessonTitle?: string
 ): CatchUpResult {
-  const missed = transcriptItems.filter(
-    (item) => item.end > fromTime && item.start < toTime
+  const safeStart = Math.max(0, fromTime);
+  const safeEnd = Math.max(safeStart + 1, toTime);
+  let missed = transcriptItems.filter(
+    (item) => item.end > safeStart && item.start < safeEnd
   );
 
-  return {
-    title: missed[0]?.topic ?? "What you missed",
-    bullets: missed.slice(0, MAX_BULLETS).map((item) => firstClause(item.text)),
-    keyIdea: missed.find((item) => item.importance === "high")?.text ?? missed[0]?.text ?? "",
-    bridge: buildBridge(transcriptItems, fromTime, toTime),
-    startTime: fromTime,
-    endTime: toTime,
-  };
-}
+  // If the window fell in a quiet pause or near start/end, grab adjacent context
+  if (missed.length === 0 && transcriptItems.length > 0) {
+    missed = transcriptItems.filter(
+      (item) => item.end > safeStart - 25 && item.start < safeEnd + 25
+    );
+    if (missed.length === 0) {
+      const sorted = [...transcriptItems].sort(
+        (a, b) => Math.abs(a.start - safeStart) - Math.abs(b.start - safeStart)
+      );
+      missed = sorted.slice(0, 2);
+    }
+  }
 
-function firstClause(text: string): string {
-  const match = text.match(/^(.*?)(,| — | - |;)/);
-  return (match ? match[1] : text).trim();
+  const smart = generateSmartCatchUp(missed, safeStart, safeEnd, lessonTitle);
+  return {
+    ...smart,
+    bridge: buildBridge(transcriptItems, safeStart, safeEnd),
+  };
 }
 
 /**
@@ -88,9 +97,20 @@ export function buildMissedWindow(
   const start = Math.min(...cluster.map((e) => e.start), event.start);
   const end = Math.max(...cluster.map((e) => e.end), event.end);
 
-  const overlapping = transcript.filter(
+  let overlapping = transcript.filter(
     (item) => item.end > start && item.start < end
   );
+  if (overlapping.length === 0 && transcript.length > 0) {
+    overlapping = transcript.filter(
+      (item) => item.end > start - 15 && item.start < end + 15
+    );
+    if (overlapping.length === 0) {
+      const sorted = [...transcript].sort(
+        (a, b) => Math.abs(a.start - start) - Math.abs(b.start - start)
+      );
+      overlapping = sorted.slice(0, 1);
+    }
+  }
 
   return {
     id: event.id,
