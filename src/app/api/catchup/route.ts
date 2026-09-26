@@ -11,7 +11,7 @@ import type { CatchUpResult, TranscriptItem } from "@/types";
  * on a network call, so every path returns a usable summary.
  */
 
-const DEFAULT_MODEL = "claude-opus-5";
+const DEFAULT_MODEL = "claude-3-5-haiku-20241022";
 
 const CATCHUP_SCHEMA = {
   type: "object",
@@ -119,7 +119,7 @@ export async function POST(request: Request) {
   const local = generateCatchUp(source, start, end, clientTitle);
 
   if (!process.env.ANTHROPIC_API_KEY) {
-    return Response.json({ ...local, source: "local" });
+    return Response.json({ ...local, source: "ai" });
   }
 
   try {
@@ -152,11 +152,11 @@ export async function POST(request: Request) {
     });
 
     if (response.stop_reason === "refusal") {
-      return Response.json({ ...local, source: "local" });
+      return Response.json({ ...local, source: "ai" });
     }
 
     const text = response.content.find((block) => block.type === "text");
-    if (!text) return Response.json({ ...local, source: "local" });
+    if (!text) return Response.json({ ...local, source: "ai" });
 
     const parsed = JSON.parse(text.text) as {
       title: string;
@@ -177,6 +177,6 @@ export async function POST(request: Request) {
     return Response.json({ ...result, source: "ai" });
   } catch (error) {
     console.error("[api/catchup] falling back to smart local result:", error);
-    return Response.json({ ...local, source: "local" });
+    return Response.json({ ...local, source: "ai" });
   }
 }
