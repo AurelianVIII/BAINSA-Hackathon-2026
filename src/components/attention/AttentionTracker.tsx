@@ -77,33 +77,33 @@ function Bar({
  * a simulated silhouette (default) and a real webcam feed analyzed live via
  * MediaPipe Face Landmarker (`src/lib/attention/real-tracker.ts`).
  *
- * Real capture is opt-in and off by default (ROADMAP.md risk #6: a
- * permission prompt or wrong face mid-demo is worse than a clean fallback;
- * also, in real usage the student is likely already in a Meet/Teams call
- * holding the camera, so getUserMedia can fail with NotReadableError for
- * reasons that have nothing to do with permissions). While real capture is
- * on but no face is detected yet (loading, or nobody in frame), the bars
- * fall back to the simulated `sample`/`level` props rather than freezing.
+ * `useRealCamera` is controlled by the page (surfaced in Settings, not a
+ * button on this card — one less thing competing for attention here). Real
+ * capture is opt-in and off by default (ROADMAP.md risk #6: a permission
+ * prompt or wrong face mid-demo is worse than a clean fallback; also, in
+ * real usage the student is likely already in a Meet/Teams call holding the
+ * camera, so getUserMedia can fail with NotReadableError for reasons that
+ * have nothing to do with permissions). While real capture is on but no
+ * face is detected yet (loading, or nobody in frame), the bars fall back to
+ * the simulated `sample`/`level` props rather than freezing.
  */
 export function AttentionTracker({
   currentTime,
   sample,
   level,
+  useRealCamera,
+  onToggleRealCamera,
   onLiveSample,
-  onRealCameraChange,
 }: {
   currentTime: number;
   sample: AttentionSample;
   level: "high" | "medium" | "low";
+  useRealCamera: boolean;
+  onToggleRealCamera: (active: boolean) => void;
   /** Called with each real detected sample, so the page can record it onto
    * the shared timeline instead of it only ever affecting this card. */
   onLiveSample?: (sample: AttentionSample) => void;
-  /** Called whenever real capture is toggled, so the page can hide the
-   * pre-built demo timeline while genuine attentiveness is being
-   * registered instead of mixing the two together. */
-  onRealCameraChange?: (active: boolean) => void;
 }) {
-  const [useRealCamera, setUseRealCamera] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [detectionError, setDetectionError] = useState<string | null>(null);
   const [liveSample, setLiveSample] = useState<AttentionSample | null>(null);
@@ -119,13 +119,6 @@ export function AttentionTracker({
   useEffect(() => {
     onLiveSampleRef.current = onLiveSample;
   }, [onLiveSample]);
-
-  useEffect(() => {
-    onRealCameraChange?.(useRealCamera);
-    // Only fire when the toggle itself changes — onRealCameraChange isn't
-    // expected to change identity in a way that should re-trigger this.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [useRealCamera]);
 
   useEffect(() => {
     if (!useRealCamera) return;
@@ -194,7 +187,7 @@ export function AttentionTracker({
       })
       .catch((error) => {
         setCameraError(describeCameraError(error));
-        setUseRealCamera(false);
+        onToggleRealCamera(false);
       });
 
     return () => {
@@ -204,7 +197,7 @@ export function AttentionTracker({
       setLiveSample(null);
       setDetectionError(null);
     };
-  }, [useRealCamera]);
+  }, [useRealCamera, onToggleRealCamera]);
 
   const effectiveSample = liveSample ?? sample;
   const effectiveLevel = liveSample ? getAttentionLevel(liveSample) : level;
@@ -220,18 +213,14 @@ export function AttentionTracker({
         >
           {label}
         </span>
-        <button
-          type="button"
-          onClick={() => setUseRealCamera((v) => !v)}
-          className="rounded-full bg-zinc-100 px-2.5 py-1 text-xs font-medium text-zinc-600 transition-colors hover:bg-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
-        >
-          {useRealCamera ? "Use simulated view" : "Use real webcam"}
-        </button>
+        {useRealCamera && (
+          <span className="text-xs text-zinc-400">Real webcam — Settings to turn off</span>
+        )}
       </div>
       {/* max-h caps the feed so the panel cannot eat the right column.
           At 4/3 in a ~750px column this renders ~560px tall, which pushed
           the catch-up alert and the AI summary below the fold. */}
-      <div className="relative flex aspect-[4/3] max-h-[240px] w-full items-center justify-center overflow-hidden rounded-lg bg-zinc-900">
+      <div className="relative mx-auto flex aspect-[4/3] max-h-[240px] w-full max-w-[320px] items-center justify-center overflow-hidden rounded-lg bg-zinc-900">
         {useRealCamera ? (
           <video
             ref={videoRef}

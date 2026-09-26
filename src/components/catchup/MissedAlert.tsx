@@ -47,7 +47,7 @@ export function MissedAlert({
       <div className="mt-3 flex gap-2">
         <button
           onClick={() => onShowSummary(missedWindow)}
-          className="rounded-lg bg-blue-600 px-3 py-2 text-sm font-medium text-white hover:bg-blue-500"
+          className="rounded-lg bg-zinc-900 px-3 py-2 text-sm font-medium text-white hover:bg-zinc-700 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
         >
           Show me a summary
         </button>

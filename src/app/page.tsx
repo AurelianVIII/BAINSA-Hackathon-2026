@@ -124,6 +124,11 @@ export default function Home() {
   }, []);
 
   const startTranscription = () => {
+    // Mutually exclusive with a loaded video — otherwise the YouTube
+    // player's own time-polling and the transcriber's elapsed-time clock
+    // both call setCurrentTime independently and fight every ~250ms.
+    setVideoId(null);
+    setVideoDuration(null);
     setTranscriptionError(null);
     const transcriber = createLiveTranscriber({
       onTranscript: setLiveItems,
@@ -337,7 +342,11 @@ export default function Home() {
 
   return (
     <div className="flex h-screen flex-col overflow-hidden bg-zinc-50 dark:bg-zinc-950">
-      <Header isLive={isPlaying} />
+      <Header
+        isLive={isPlaying}
+        useRealCamera={hasRealCamera}
+        onToggleRealCamera={setHasRealCamera}
+      />
 
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-y-auto p-3 lg:grid-cols-[3fr_2fr] lg:overflow-hidden">
         {/* Left column: the lesson itself. */}
@@ -366,6 +375,10 @@ export default function Home() {
             caption={caption}
             captionNotice={captionNotice}
             videoId={videoId}
+            isLiveLesson={isLiveLesson}
+            isTranscribing={isTranscribing}
+            transcriptionSupported={transcriptionSupported}
+            transcriptionError={transcriptionError}
             onPlayPause={() => setIsPlaying((playing) => !playing)}
             onSpeedChange={setSpeed}
             onSeek={handleSeek}
@@ -376,20 +389,17 @@ export default function Home() {
             }}
             onVideoDurationChange={setVideoDuration}
             onVideoPlayingChange={setIsPlaying}
+            onStartTranscription={startTranscription}
+            onStopTranscription={stopTranscription}
+            onUseDemoLesson={useDemoLesson}
           />
           <TranscriptPanel
             items={activeTranscript}
             currentTime={currentTime}
             onSeek={handleSeek}
             missedIds={missedIds}
-            isTranscribing={isTranscribing}
             isLiveLesson={isLiveLesson}
-            transcriptionSupported={transcriptionSupported}
-            transcriptionError={transcriptionError}
             interimText={interimText}
-            onStartTranscription={startTranscription}
-            onStopTranscription={stopTranscription}
-            onUseDemoLesson={useDemoLesson}
             keyMomentsSlot={
               <KeyMoments
                 items={activeTranscript}
@@ -415,8 +425,9 @@ export default function Home() {
             currentTime={currentTime}
             sample={attentionSample}
             level={attentionLevel}
+            useRealCamera={hasRealCamera}
+            onToggleRealCamera={setHasRealCamera}
             onLiveSample={handleLiveAttentionSample}
-            onRealCameraChange={setHasRealCamera}
           />
 
           <MissedAlert

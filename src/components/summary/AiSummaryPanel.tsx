@@ -22,7 +22,7 @@ function SparkleIcon() {
   return (
     <svg
       viewBox="0 0 24 24"
-      className="h-3.5 w-3.5"
+      className="h-7 w-7"
       fill="currentColor"
       aria-hidden="true"
     >
@@ -104,7 +104,7 @@ export function AiSummaryPanel({ request }: { request: MissedWindow | null }) {
       <div ref={panelRef}>
         <Card title="AI summary">
           <div className="flex flex-col items-center gap-2 py-6 text-center">
-            <span className="text-zinc-300 dark:text-zinc-600">
+            <span className="text-zinc-400 dark:text-zinc-500">
               <SparkleIcon />
             </span>
             <p className="text-sm text-zinc-400 dark:text-zinc-500">
@@ -122,7 +122,7 @@ export function AiSummaryPanel({ request }: { request: MissedWindow | null }) {
       title={
         <span className="flex items-center justify-between gap-2">
           <span>AI Summary of the missed part</span>
-          <span className="flex items-center gap-1 rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-medium normal-case text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
+          <span className="flex items-center gap-1 rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-medium normal-case text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
             <SparkleIcon />
             AI
           </span>

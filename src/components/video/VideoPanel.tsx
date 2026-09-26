@@ -48,6 +48,10 @@ export function VideoPanel({
   caption,
   captionNotice,
   videoId,
+  isLiveLesson,
+  isTranscribing,
+  transcriptionSupported,
+  transcriptionError,
   onPlayPause,
   onSpeedChange,
   onSeek,
@@ -55,6 +59,9 @@ export function VideoPanel({
   onVideoTimeUpdate,
   onVideoDurationChange,
   onVideoPlayingChange,
+  onStartTranscription,
+  onStopTranscription,
+  onUseDemoLesson,
 }: {
   subject: string;
   title: string;
@@ -66,6 +73,10 @@ export function VideoPanel({
   /** Shown in the caption bar when there is no caption text to show. */
   captionNotice?: string | null;
   videoId: string | null;
+  isLiveLesson: boolean;
+  isTranscribing: boolean;
+  transcriptionSupported: boolean;
+  transcriptionError: string | null;
   onPlayPause: () => void;
   onSpeedChange: (speed: 1 | 2) => void;
   onSeek: (time: number) => void;
@@ -73,6 +84,9 @@ export function VideoPanel({
   onVideoTimeUpdate: (time: number) => void;
   onVideoDurationChange: (duration: number) => void;
   onVideoPlayingChange: (playing: boolean) => void;
+  onStartTranscription: () => void;
+  onStopTranscription: () => void;
+  onUseDemoLesson: () => void;
 }) {
   const [urlDraft, setUrlDraft] = useState("");
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -217,30 +231,77 @@ export function VideoPanel({
       {/* Say what the lesson is — a stranger should not have to infer it
           from the whiteboard bullets. */}
       <div className="flex items-baseline gap-2">
-        <span className="shrink-0 rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
+        <span className="shrink-0 rounded-full bg-zinc-100 px-2 py-0.5 text-xs font-medium text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
           {subject}
         </span>
         <h2 className="flex-1 truncate text-sm font-semibold text-zinc-900 dark:text-zinc-50">
           {title}
         </h2>
+        {/* Lesson source: the demo (default), or one of exactly two real
+            sources — never more than one active at a time. */}
         {videoId ? (
           <button
             type="button"
             onClick={handleRemoveVideo}
-            className="shrink-0 rounded-full border border-zinc-300 px-2 py-0.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+            className="shrink-0 rounded-full border border-zinc-300 px-2 py-0.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-900 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
           >
             Use mock lesson
           </button>
+        ) : isLiveLesson ? (
+          <div className="flex shrink-0 items-center gap-1.5">
+            {isTranscribing ? (
+              <button
+                type="button"
+                onClick={onStopTranscription}
+                className="flex items-center gap-1.5 rounded-full bg-rose-600 px-2.5 py-0.5 text-xs font-medium text-white hover:bg-rose-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-900"
+              >
+                <span
+                  aria-hidden
+                  className="h-1.5 w-1.5 animate-pulse rounded-full bg-white motion-reduce:animate-none"
+                />
+                Stop transcribing
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={onUseDemoLesson}
+                className="rounded-full border border-zinc-300 px-2 py-0.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-900 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+              >
+                Use mock lesson
+              </button>
+            )}
+          </div>
         ) : (
-          <button
-            type="button"
-            onClick={() => setIsFormOpen((open) => !open)}
-            className="shrink-0 rounded-full border border-zinc-300 px-2 py-0.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
-          >
-            Use a YouTube video
-          </button>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <button
+              type="button"
+              onClick={onStartTranscription}
+              disabled={!transcriptionSupported}
+              title={
+                transcriptionSupported
+                  ? undefined
+                  : "This browser has no speech recognition — try Chrome or Edge."
+              }
+              className="rounded-full border border-zinc-300 px-2 py-0.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-900 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+            >
+              Live transcription
+            </button>
+            <button
+              type="button"
+              onClick={() => setIsFormOpen((open) => !open)}
+              className="rounded-full border border-zinc-300 px-2 py-0.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-900 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+            >
+              YouTube video
+            </button>
+          </div>
         )}
       </div>
+
+      {transcriptionError && (
+        <p role="alert" className="text-xs text-rose-600 dark:text-rose-400">
+          {transcriptionError}
+        </p>
+      )}
 
       {isFormOpen && !videoId && (
         <div className="flex items-center gap-2">
@@ -251,12 +312,12 @@ export function VideoPanel({
             onKeyDown={(e) => e.key === "Enter" && handleLoadVideo()}
             placeholder="Paste a YouTube video URL"
             aria-label="YouTube video URL"
-            className="flex-1 rounded-lg border border-zinc-300 px-2.5 py-1.5 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+            className="flex-1 rounded-lg border border-zinc-300 px-2.5 py-1.5 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-900 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
           />
           <button
             type="button"
             onClick={handleLoadVideo}
-            className="shrink-0 rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
+            className="shrink-0 rounded-lg bg-zinc-900 px-3 py-1.5 text-sm font-medium text-white hover:bg-zinc-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-900 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
           >
             Load
           </button>
@@ -268,7 +329,7 @@ export function VideoPanel({
         </p>
       )}
 
-      <div className="relative aspect-video max-h-[42vh] w-full overflow-hidden rounded-lg bg-gradient-to-br from-slate-800 to-slate-900">
+      <div className="relative aspect-video max-h-[38vh] w-full overflow-hidden rounded-lg bg-gradient-to-br from-slate-800 to-slate-900">
         {videoId ? (
           // Real, controllable YouTube playback. `controls: 0`/`disablekb: 1`
           // keep this transport bar as the only control surface, so a real
@@ -305,7 +366,7 @@ export function VideoPanel({
               <div className="h-16 w-16 rounded-full bg-gradient-to-b from-amber-200 to-amber-300 shadow-md" />
               <div className="h-12 w-20 rounded-t-3xl bg-teal-600 shadow-md" />
             </div>
-            <span className="absolute left-[6%] top-[76%] rounded-full bg-black/60 px-2.5 py-1 text-xs font-medium text-white backdrop-blur-sm">
+            <span className="absolute bottom-[calc(26%+0.5rem)] left-[6%] rounded-full bg-black/60 px-2.5 py-1 text-xs font-medium text-white backdrop-blur-sm">
               Prof. Emma Rossi
             </span>
           </>
@@ -333,7 +394,7 @@ export function VideoPanel({
         <button
           type="button"
           onClick={onPlayPause}
-          className="rounded-full bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
+          className="rounded-full bg-zinc-900 px-4 py-1.5 text-sm font-medium text-white hover:bg-zinc-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-900 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
         >
           {isPlaying ? "Pause" : "Play"}
         </button>
@@ -341,7 +402,7 @@ export function VideoPanel({
           type="button"
           onClick={() => onSpeedChange(speed === 1 ? 2 : 1)}
           aria-label={`Playback speed ${speed}x, click to change`}
-          className="rounded-full border border-zinc-300 px-2.5 py-1.5 text-xs font-medium tabular-nums text-zinc-700 hover:bg-zinc-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+          className="rounded-full border border-zinc-300 px-2.5 py-1.5 text-xs font-medium tabular-nums text-zinc-700 hover:bg-zinc-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-900 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
         >
           {speed}×
         </button>
@@ -359,7 +420,7 @@ export function VideoPanel({
           value={currentTime}
           aria-label="Seek lesson"
           onChange={(e) => onSeek(Number(e.target.value))}
-          className="flex-1 accent-indigo-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
+          className="flex-1 accent-zinc-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-900"
         />
       </div>
     </div>

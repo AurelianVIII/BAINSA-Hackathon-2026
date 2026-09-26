@@ -40,3 +40,31 @@ body {
     scroll-behavior: auto !important;
   }
 }
+
+/*
+ * Scrollable panels are narrow, and the platform default scrollbar renders
+ * stepper arrows that crowd the column edge. Thin, overlay-style scrollbars
+ * keep the gutter usable without hiding that a region scrolls.
+ */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-zinc-400, #a1a1aa) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  border-radius: 9999px;
+  background-color: rgb(161 161 170 / 0.6);
+}
+
+*::-webkit-scrollbar-button {
+  display: none;
+}
