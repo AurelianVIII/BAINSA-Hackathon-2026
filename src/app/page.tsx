@@ -111,12 +111,12 @@ export default function Home() {
   // While transcribing, the recogniser's own elapsed time is the clock —
   // the transcript's timestamps come from it, so anything else would drift.
   useEffect(() => {
-    if (!isTranscribing) return;
+    if (!isTranscribing || isYouTube) return;
     const interval = setInterval(() => {
       setCurrentTime(transcriberRef.current?.elapsed() ?? 0);
     }, 250);
     return () => clearInterval(interval);
-  }, [isTranscribing]);
+  }, [isTranscribing, isYouTube]);
 
   // Stop the microphone if the page goes away mid-lesson.
   useEffect(() => {
@@ -124,11 +124,6 @@ export default function Home() {
   }, []);
 
   const startTranscription = () => {
-    // Mutually exclusive with a loaded video — otherwise the YouTube
-    // player's own time-polling and the transcriber's elapsed-time clock
-    // both call setCurrentTime independently and fight every ~250ms.
-    setVideoId(null);
-    setVideoDuration(null);
     setTranscriptionError(null);
     const transcriber = createLiveTranscriber({
       onTranscript: setLiveItems,
@@ -137,7 +132,9 @@ export default function Home() {
     });
     transcriberRef.current = transcriber;
     setLiveItems([]);
-    setCurrentTime(0);
+    if (!isYouTube) {
+      setCurrentTime(0);
+    }
     setIsTranscribing(true);
     setIsPlaying(true);
     transcriber.start();
@@ -225,13 +222,17 @@ export default function Home() {
     return () => clearInterval(interval);
   }, [isPlaying, speed, isYouTube, isTranscribing]);
 
-  // Whichever transcript the lesson is currently running on: YouTube video
-  // captions first (if available), then live speech, then the demo script.
-  const isYouTubeLesson = isYouTube && youtubeReady !== null;
-  const isLiveLesson = !isYouTubeLesson && liveItems !== null;
-  const isDemoLesson = !isYouTubeLesson && !isLiveLesson;
+  // Whichever transcript the lesson is currently running on: live speech
+  // when actively transcribing, otherwise YouTube video captions (if loaded),
+  // then the demo script.
+  const isLiveLesson = liveItems !== null;
+  const isYouTubeLesson = isYouTube && !isLiveLesson && youtubeReady !== null;
+  const isDemoLesson = !isLiveLesson && !isYouTubeLesson;
   const activeTranscript =
-    (isYouTubeLesson ? youtubeReady?.items : null) ?? liveItems ?? transcript;
+    liveItems ??
+    (isYouTube
+      ? (youtubeReady?.items && youtubeReady.items.length > 0 ? youtubeReady.items : transcript)
+      : transcript);
   const activeDuration = isLiveLesson
     ? Math.max(
         LIVE_MIN_DURATION,
