@@ -4,10 +4,18 @@ import { useEffect, useRef, useState } from "react";
 import { Card } from "@/components/ui/Card";
 import type { AttentionSample } from "@/types";
 
+type CaptureMode = "simulated" | "webcam" | "display";
+
 const LEVEL_STYLES: Record<"high" | "medium" | "low", { label: string; badge: string }> = {
   high: { label: "Attention: High", badge: "bg-emerald-500 text-white" },
   medium: { label: "Attention: Medium", badge: "bg-amber-500 text-white" },
   low: { label: "Attention: Low", badge: "bg-rose-500 text-white" },
+};
+
+const MODE_LABELS: Record<CaptureMode, string> = {
+  simulated: "Simulated",
+  webcam: "My webcam",
+  display: "Share a tab",
 };
 
 /**
@@ -23,12 +31,12 @@ function describeCameraError(error: unknown): string {
     return "Camera is busy — probably already in use by Meet, Teams, or another app. Showing simulated view instead.";
   }
   if (name === "NotAllowedError" || name === "PermissionDeniedError") {
-    return "Camera permission denied — showing simulated view instead.";
+    return "Permission denied — showing simulated view instead.";
   }
   if (name === "NotFoundError" || name === "DevicesNotFoundError") {
     return "No camera found — showing simulated view instead.";
   }
-  return "Camera unavailable — showing simulated view instead.";
+  return "Capture unavailable — showing simulated view instead.";
 }
 
 function Bar({
@@ -68,16 +76,21 @@ function Bar({
 
 /**
  * Owned by the Attention feature team. Simulated webcam attention tracker.
- * Real `getUserMedia` access is opt-in and off by default (ROADMAP.md risk
- * #6: a permission prompt or wrong face mid-demo is worse than a clean
- * fallback) — toggling it on only swaps the video feed underneath the
- * still-illustrative tracking box; it does not run any real face/gaze
- * detection, which stays out of scope for this prototype.
+ * Real capture is opt-in and off by default (ROADMAP.md risk #6: a
+ * permission prompt or wrong face mid-demo is worse than a clean fallback)
+ * — switching modes only swaps the video feed underneath the still-
+ * illustrative tracking box; no real face/gaze detection runs on it, which
+ * stays out of scope for this prototype.
  *
- * Off-by-default also matters because in real usage the student is likely
- * already in a Meet/Teams call holding the camera — webcams are largely
- * exclusive-access devices, so a second `getUserMedia()` call can fail with
- * `NotReadableError` for reasons that have nothing to do with permissions.
+ * Two real-capture modes, not one:
+ * - "My webcam" (`getUserMedia`) — off by default because in real usage the
+ *   student is likely already in a Meet/Teams call holding the camera;
+ *   webcams are largely exclusive-access devices, so this can fail with
+ *   `NotReadableError` for reasons that have nothing to do with permissions.
+ * - "Share a tab" (`getDisplayMedia`) — sidesteps that entirely by capturing
+ *   whatever's already rendered in the shared tab/window (e.g. the Meet/Teams
+ *   call itself) instead of requesting a second exclusive handle on the
+ *   camera device.
  */
 export function AttentionTracker({
   sample,
@@ -87,43 +100,55 @@ export function AttentionTracker({
   sample: AttentionSample;
   level: "high" | "medium" | "low";
 }) {
-  const [useRealCamera, setUseRealCamera] = useState(false);
+  const [mode, setMode] = useState<CaptureMode>("simulated");
   const [cameraError, setCameraError] = useState<string | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
-  useEffect(() => {
-    if (!useRealCamera) return;
+  const stopStream = () => {
+    streamRef.current?.getTracks().forEach((track) => track.stop());
+    streamRef.current = null;
+  };
 
-    let cancelled = false;
-    navigator.mediaDevices
-      ?.getUserMedia({ video: true })
-      .then((stream) => {
-        if (cancelled) {
-          stream.getTracks().forEach((track) => track.stop());
-          return;
-        }
-        streamRef.current = stream;
-        if (videoRef.current) videoRef.current.srcObject = stream;
-        setCameraError(null);
-      })
-      .catch((error) => {
-        setCameraError(describeCameraError(error));
-        setUseRealCamera(false);
+  useEffect(() => stopStream, []);
+
+  const startCapture = async (nextMode: "webcam" | "display") => {
+    try {
+      const stream =
+        nextMode === "webcam"
+          ? await navigator.mediaDevices.getUserMedia({ video: true })
+          : await navigator.mediaDevices.getDisplayMedia({
+              video: { displaySurface: "browser" } as MediaTrackConstraints,
+              audio: false,
+            });
+
+      stopStream();
+      streamRef.current = stream;
+      if (videoRef.current) videoRef.current.srcObject = stream;
+      setCameraError(null);
+      setMode(nextMode);
+
+      // The browser's own "stop sharing" control ends the track directly.
+      stream.getVideoTracks()[0]?.addEventListener("ended", () => {
+        streamRef.current = null;
+        setMode("simulated");
       });
+    } catch (error) {
+      setCameraError(describeCameraError(error));
+    }
+  };
 
-    return () => {
-      cancelled = true;
-      streamRef.current?.getTracks().forEach((track) => track.stop());
-      streamRef.current = null;
-    };
-  }, [useRealCamera]);
+  const selectSimulated = () => {
+    stopStream();
+    setCameraError(null);
+    setMode("simulated");
+  };
 
   const { label, badge } = LEVEL_STYLES[level];
 
   return (
     <Card title="Attention tracker" className="relative">
-      <div className="mb-2 flex items-center justify-between">
+      <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
         <span
           role="status"
           aria-live="polite"
@@ -131,16 +156,28 @@ export function AttentionTracker({
         >
           {label}
         </span>
-        <button
-          type="button"
-          onClick={() => setUseRealCamera((v) => !v)}
-          className="rounded-full bg-zinc-100 px-2.5 py-1 text-xs font-medium text-zinc-600 transition-colors hover:bg-zinc-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 dark:bg-zinc-800 dark:text-zinc-300 dark:hover:bg-zinc-700"
-        >
-          {useRealCamera ? "Use simulated view" : "Use real webcam"}
-        </button>
+        <div className="flex gap-1 rounded-full bg-zinc-100 p-0.5 dark:bg-zinc-800">
+          {(["simulated", "webcam", "display"] as const).map((option) => (
+            <button
+              key={option}
+              type="button"
+              onClick={() =>
+                option === "simulated" ? selectSimulated() : startCapture(option)
+              }
+              aria-pressed={mode === option}
+              className={`rounded-full px-2.5 py-1 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 ${
+                mode === option
+                  ? "bg-white text-zinc-900 shadow-sm dark:bg-zinc-700 dark:text-zinc-50"
+                  : "text-zinc-600 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-100"
+              }`}
+            >
+              {MODE_LABELS[option]}
+            </button>
+          ))}
+        </div>
       </div>
       <div className="relative flex aspect-[4/3] w-full items-center justify-center overflow-hidden rounded-lg bg-zinc-900">
-        {useRealCamera ? (
+        {mode !== "simulated" ? (
           <video
             ref={videoRef}
             autoPlay
