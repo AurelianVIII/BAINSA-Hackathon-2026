@@ -15,6 +15,23 @@ const YT_ENDED = 0;
 const YT_PLAYING = 1;
 const YT_PAUSED = 2;
 
+/** YouTube IFrame API `onError` codes — see the API's onError docs. */
+function describeYouTubeError(code: number): string {
+  switch (code) {
+    case 2:
+      return "That doesn't look like a valid YouTube video.";
+    case 5:
+      return "This video can't be played in an embedded player.";
+    case 100:
+      return "This video was not found — it may have been removed or made private.";
+    case 101:
+    case 150:
+      return "This video's owner has disabled playback on other sites.";
+    default:
+      return "YouTube couldn't play this video.";
+  }
+}
+
 function formatTime(seconds: number) {
   const m = Math.floor(seconds / 60);
   const s = Math.floor(seconds % 60)
@@ -91,6 +108,13 @@ export function VideoPanel({
   const [urlDraft, setUrlDraft] = useState("");
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [urlError, setUrlError] = useState<string | null>(null);
+  /** Set by the player's own `onError` — a bad/unembeddable video, not a bad
+   *  URL. Keyed by videoId (rather than reset in the load effect) so a stale
+   *  error from a previous video can't flash on the next one. */
+  const [playbackError, setPlaybackError] = useState<{
+    videoId: string;
+    message: string;
+  } | null>(null);
 
   const playerContainerRef = useRef<HTMLDivElement | null>(null);
   /** Set only once the player is ready to take commands. */
@@ -179,6 +203,8 @@ export function VideoPanel({
             }, POLL_INTERVAL_MS);
           },
           onStateChange: (event) => handleStateChange(event.data, player),
+          onError: (event) =>
+            setPlaybackError({ videoId, message: describeYouTubeError(event.data) }),
         },
       });
       created = player;
@@ -225,6 +251,9 @@ export function VideoPanel({
     onVideoChange(null);
     setUrlDraft("");
   };
+
+  const currentPlaybackError =
+    videoId && playbackError?.videoId === videoId ? playbackError.message : null;
 
   return (
     <div className="flex shrink-0 flex-col gap-2.5 rounded-xl border border-zinc-200 bg-white p-3 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
@@ -344,6 +373,20 @@ export function VideoPanel({
           // replaced and throws a NotFoundError.
           <div className="absolute inset-0 [&>iframe]:absolute [&>iframe]:inset-0 [&>iframe]:h-full [&>iframe]:w-full">
             <div ref={playerContainerRef} />
+            {currentPlaybackError && (
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-900/95 p-6 text-center">
+                <p role="alert" className="text-sm font-medium text-white">
+                  {currentPlaybackError}
+                </p>
+                <button
+                  type="button"
+                  onClick={handleRemoveVideo}
+                  className="rounded-full bg-white px-3 py-1.5 text-xs font-medium text-zinc-900 hover:bg-zinc-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+                >
+                  Use mock lesson
+                </button>
+              </div>
+            )}
           </div>
         ) : (
           <>
