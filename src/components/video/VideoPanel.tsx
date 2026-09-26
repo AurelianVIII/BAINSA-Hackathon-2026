@@ -128,6 +128,13 @@ export function VideoPanel({
     if (isPlaying) player.playVideo();
   });
   const handleStateChange = useEffectEvent((state: number, player: YT.Player) => {
+    // Keep YouTube's native captions suppressed so they do not clash with ours
+    try {
+      (player as unknown as { unloadModule?: (m: string) => void }).unloadModule?.("captions");
+      (player as unknown as { unloadModule?: (m: string) => void }).unloadModule?.("cc");
+      (player as unknown as { setOption?: (m: string, k: string, v: unknown) => void }).setOption?.("captions", "track", {});
+    } catch {}
+
     if (state === YT_PLAYING) {
       // Seeking a video that has never played starts it; if the student
       // was only scrubbing while paused, keep it paused.
@@ -172,12 +179,23 @@ export function VideoPanel({
           modestbranding: 1,
           rel: 0,
           playsinline: 1,
+          cc_load_policy: 0,
+          cc_lang_pref: "none",
+          iv_load_policy: 3,
+          fs: 0,
         },
         events: {
           onReady: () => {
             if (cancelled) return;
             playerRef.current = player;
             applyInitialState(player);
+
+            // Suppress YouTube's internal captions so they don't clash with ours
+            try {
+              (player as unknown as { unloadModule?: (m: string) => void }).unloadModule?.("captions");
+              (player as unknown as { unloadModule?: (m: string) => void }).unloadModule?.("cc");
+              (player as unknown as { setOption?: (m: string, k: string, v: unknown) => void }).setOption?.("captions", "track", {});
+            } catch {}
 
             let lastDuration = 0;
             poll = setInterval(() => {
@@ -346,29 +364,30 @@ export function VideoPanel({
         </p>
       )}
 
-      <div className="relative aspect-video max-h-[38vh] w-full overflow-hidden rounded-lg bg-gradient-to-br from-slate-800 to-slate-900">
+      <div className="relative aspect-video max-h-[48vh] w-full overflow-hidden rounded-lg bg-gradient-to-br from-slate-800 to-slate-900 shadow-inner">
         {videoId ? (
-          // Real, controllable YouTube playback. `controls: 0`/`disablekb: 1`
-          // keep this transport bar as the only control surface, so a real
-          // video gets exactly the same play/pause/speed/seek options as
-          // the mock lesson rather than a second, conflicting set.
-          //
-          // The IFrame API *replaces* whatever element it's given with its
-          // own <iframe>, bypassing React's tracking of that node. Mounting
-          // it on a plain nested div (rather than the div React itself
-          // manages here) keeps that swap invisible to React's reconciler —
-          // otherwise React later tries to remove a node YouTube already
-          // replaced and throws a NotFoundError.
-          <div className="absolute inset-0 [&>iframe]:absolute [&>iframe]:inset-0 [&>iframe]:h-full [&>iframe]:w-full">
+          // Real, controllable YouTube playback with native GUI and captions disabled.
+          // Pointer-events on the iframe are disabled so YouTube's native controls,
+          // cards, and captions cannot intercept clicks or clash with FocusAid.
+          <div
+            className="absolute inset-0 cursor-pointer [&>iframe]:pointer-events-none [&>iframe]:absolute [&>iframe]:inset-0 [&>iframe]:h-full [&>iframe]:w-full"
+            onClick={() => {
+              if (!currentPlaybackError) onPlayPause();
+            }}
+            title={currentPlaybackError ? undefined : isPlaying ? "Click to pause" : "Click to play"}
+          >
             <div ref={playerContainerRef} />
             {currentPlaybackError && (
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 bg-slate-900/95 p-6 text-center">
+              <div className="pointer-events-auto absolute inset-0 z-10 flex flex-col items-center justify-center gap-3 bg-slate-900/95 p-6 text-center">
                 <p role="alert" className="text-sm font-medium text-white">
                   {currentPlaybackError}
                 </p>
                 <button
                   type="button"
-                  onClick={handleRemoveVideo}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleRemoveVideo();
+                  }}
                   className="rounded-full bg-white px-3 py-1.5 text-xs font-medium text-zinc-900 hover:bg-zinc-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
                 >
                   Try another video
@@ -434,27 +453,22 @@ export function VideoPanel({
             </div>
           </div>
         )}
-
-        {/* Floating compact captions. Sleek, unobtrusive badge that only covers
-            minimal space when text is active, leaving the rest of the video fully visible. */}
-        {showCaptions && (caption || captionNotice) && (
-          <div className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center px-4">
-            {caption ? (
-              <div className="max-w-2xl rounded-lg bg-black/85 px-4 py-2 text-center shadow-xl backdrop-blur-sm transition-all duration-150">
-                <p className="text-sm font-medium leading-snug text-white drop-shadow sm:text-base md:text-lg">
-                  {caption.text}
-                </p>
-              </div>
-            ) : captionNotice ? (
-              <div className="max-w-md rounded-md bg-black/80 px-3 py-1 text-center shadow backdrop-blur-sm">
-                <p role="status" className="text-xs font-medium text-zinc-300">
-                  {captionNotice}
-                </p>
-              </div>
-            ) : null}
-          </div>
-        )}
       </div>
+
+      {/* Dedicated Captions Bar (Positioned below the video, NOT an overlay) */}
+      {showCaptions && (caption || captionNotice) && (
+        <div className="flex min-h-[3.25rem] items-center justify-center rounded-lg border border-zinc-200/80 bg-zinc-900 px-4 py-2 text-center shadow-sm dark:border-zinc-800 dark:bg-black">
+          {caption ? (
+            <p className="text-sm font-semibold leading-relaxed text-white drop-shadow-sm sm:text-base md:text-lg">
+              {caption.text}
+            </p>
+          ) : captionNotice ? (
+            <p role="status" className="text-xs font-medium text-zinc-300">
+              {captionNotice}
+            </p>
+          ) : null}
+        </div>
+      )}
 
       {/* Controls. Hidden with no lesson loaded — there is nothing to play,
           and a dead transport bar reads as a broken app. */}
