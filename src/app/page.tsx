@@ -52,9 +52,6 @@ const LIVE_MIN_DURATION = 60;
 /** Seconds moved by the left/right arrow shortcuts. */
 const SEEK_STEP_SECONDS = 5;
 
-/** Event types that mean the student actually lost the thread. */
-const MISSED_EVENT_TYPES = ["looking-away", "low-attention"] as const;
-
 /**
  * Composition layer for the lesson screen. `currentTime` is the single
  * source of truth for lesson playback, owned here and passed down to every
@@ -309,14 +306,10 @@ export default function Home() {
   // transcript marks exactly the lines their alert offers to explain.
   const missedIds = useMemo(
     () =>
-      alertEvents
-        .filter((event) =>
-          (MISSED_EVENT_TYPES as readonly string[]).includes(event.type)
-        )
-        .flatMap(
-          (event) =>
-            buildMissedWindow(alertEvents, alertTranscript, event).transcriptIds
-        ),
+      alertEvents.flatMap(
+        (event) =>
+          buildMissedWindow(alertEvents, alertTranscript, event).transcriptIds
+      ),
     [alertEvents, alertTranscript]
   );
 

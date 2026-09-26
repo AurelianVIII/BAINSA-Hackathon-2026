@@ -2,7 +2,7 @@ import type { AttentionEvent, CatchUpResult, TranscriptItem } from "@/types";
 import type { MissedWindow } from "./types";
 
 const MERGE_GAP_SECONDS = 5;
-const PENDING_ALERT_WINDOW_SECONDS = 8;
+const PENDING_ALERT_WINDOW_SECONDS = 45;
 
 import { generateSmartCatchUp } from "@/lib/ai/smart-summarizer";
 

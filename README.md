@@ -2,12 +2,12 @@
 
 FocusAid is an AI learning accessibility tool for students who miss parts of
 a live or recorded lesson. It surfaces timestamped captions, lets a student
-ask "catch me up" to get a summary of what they missed, and simulates
-attention/understanding signals (real eye tracking and emotion recognition
-are out of scope for this prototype).
+ask "catch me up" to get a summary of what they missed, and reads
+attention signals from the webcam with in-browser face tracking (MediaPipe;
+no video leaves the browser).
 
-This is a hackathon prototype, not production software. Attention/gaze data
-is simulated with mock data — there is no real tracking, database, or auth.
+This is a hackathon prototype, not production software. Lessons come from a
+YouTube video's captions or live speech-to-text — there is no database or auth.
 
 ## Install
 
