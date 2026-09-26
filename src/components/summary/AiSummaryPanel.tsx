@@ -1,11 +1,14 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Card } from "@/components/ui/Card";
 import { SummaryFlowchart } from "@/components/summary/SummaryFlowchart";
 import { buildVisualSummary } from "@/lib/summary";
-import type { MissedWindow } from "@/lib/summary/types";
+import type { MissedWindow, VisualSummaryData } from "@/lib/summary/types";
 import { transcript } from "@/data/transcript";
+
+/** How long to wait for the AI summary before staying with the local one. */
+const AI_TIMEOUT_MS = 4000;
 
 function formatTime(seconds: number) {
   const m = Math.floor(seconds / 60);
@@ -37,10 +40,50 @@ function SparkleIcon() {
  * top, never something standing between the click and the answer.
  */
 export function AiSummaryPanel({ request }: { request: MissedWindow | null }) {
-  const data = useMemo(
+  const local = useMemo(
     () => (request ? buildVisualSummary(transcript, request) : null),
     [request]
   );
+
+  // Keyed by request id rather than reset on change, so switching windows
+  // never shows the previous window's AI text and the effect never has to
+  // clear state synchronously.
+  const [ai, setAi] = useState<{ id: string; data: VisualSummaryData } | null>(
+    null
+  );
+
+  useEffect(() => {
+    if (!request) return;
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => controller.abort(), AI_TIMEOUT_MS);
+
+    fetch("/api/summary", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ start: request.start, end: request.end }),
+      signal: controller.signal,
+    })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((result) => {
+        // Only upgrade when the route actually reached the model. A local
+        // result is already on screen, so there is nothing to swap in.
+        if (result?.source === "ai") {
+          setAi({ id: request.id, data: result as VisualSummaryData });
+        }
+      })
+      .catch(() => {
+        // Aborted or offline — the local summary is already rendered.
+      })
+      .finally(() => clearTimeout(timer));
+
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [request]);
+
+  const data = ai && request && ai.id === request.id ? ai.data : local;
 
   if (!request || !data) {
     return (

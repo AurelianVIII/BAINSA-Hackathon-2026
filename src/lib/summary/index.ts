@@ -130,6 +130,24 @@ function subgraph(ids: string[]) {
 }
 
 /**
+ * Every node id the diagram knows how to draw. The AI route constrains
+ * the model to this set, so a generated summary can pick which part of
+ * the chain to show but cannot invent a node with no layout position.
+ */
+export const DIAGRAM_NODE_IDS = FULL_NODES.map((node) => node.id);
+
+/**
+ * Build a diagram from a caller-supplied list of node ids, falling back
+ * to the full chain if the list is empty or contains nothing known.
+ */
+export function graphForNodeIds(ids: string[]) {
+  const known = ids.filter((id) => DIAGRAM_NODE_IDS.includes(id));
+  return known.length > 0
+    ? subgraph(known)
+    : { nodes: FULL_NODES, edges: FULL_EDGES };
+}
+
+/**
  * Turns a missed time window into a short written summary plus the part
  * of the reaction diagram that explains it.
  *
