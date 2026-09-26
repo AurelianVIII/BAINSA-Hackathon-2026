@@ -12,9 +12,9 @@ import type { SummaryFlowNode } from "./types";
 
 export const VIEW_W = 320;
 export const NODE_W = 244;
-export const NODE_H = 56;
-export const ROW_GAP = 104;
-const TOP_PAD = 34;
+export const NODE_H = 50;
+export const ROW_GAP = 86;
+const TOP_PAD = 22;
 
 /** Fixed reaction order. Anything unknown sorts to the end. */
 const CHAIN_ORDER = ["sun", "light", "atp", "calvin", "glucose"];
