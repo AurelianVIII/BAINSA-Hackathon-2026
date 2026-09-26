@@ -356,6 +356,17 @@ export default function Home() {
         onToggleRealCamera={setHasRealCamera}
       />
 
+      {/* Headless background attention tracking when webcam is active */}
+      <AttentionTracker
+        currentTime={currentTime}
+        sample={attentionSample}
+        level={attentionLevel}
+        useRealCamera={hasRealCamera}
+        onToggleRealCamera={setHasRealCamera}
+        onLiveSample={handleLiveAttentionSample}
+        headless
+      />
+
       <div className="grid min-h-0 flex-1 grid-cols-1 gap-3 overflow-y-auto p-3 lg:grid-cols-[3fr_2fr] lg:overflow-hidden">
         {/* Left column: the lesson itself. */}
         <div className="flex min-h-0 flex-col gap-3">
@@ -423,15 +434,6 @@ export default function Home() {
 
         {/* Right column: what the app noticed, and what it offers. */}
         <div className="flex min-h-0 flex-col gap-3 lg:overflow-y-auto">
-          <AttentionTracker
-            currentTime={currentTime}
-            sample={attentionSample}
-            level={attentionLevel}
-            useRealCamera={hasRealCamera}
-            onToggleRealCamera={setHasRealCamera}
-            onLiveSample={handleLiveAttentionSample}
-          />
-
           <MissedAlert
             window={activeAlert}
             onShowSummary={(window: MissedWindow) => setSummaryRequest(window)}

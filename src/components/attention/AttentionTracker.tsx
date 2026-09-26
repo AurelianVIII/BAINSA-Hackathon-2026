@@ -98,6 +98,7 @@ export function AttentionTracker({
   useRealCamera,
   onToggleRealCamera,
   onLiveSample,
+  headless = false,
 }: {
   currentTime: number;
   sample: AttentionSample;
@@ -107,6 +108,7 @@ export function AttentionTracker({
   /** Called with each real detected sample, so the page can record it onto
    * the shared timeline instead of it only ever affecting this card. */
   onLiveSample?: (sample: AttentionSample) => void;
+  headless?: boolean;
 }) {
   const [cameraError, setCameraError] = useState<string | null>(null);
   const [detectionError, setDetectionError] = useState<string | null>(null);
@@ -208,6 +210,20 @@ export function AttentionTracker({
   const effectiveSample = liveSample ?? sample;
   const effectiveLevel = liveSample ? getAttentionLevel(liveSample) : level;
   const { label, badge } = LEVEL_STYLES[effectiveLevel];
+
+  if (headless) {
+    if (!useRealCamera) return null;
+    return (
+      <video
+        ref={videoRef}
+        autoPlay
+        muted
+        playsInline
+        aria-hidden="true"
+        className="hidden"
+      />
+    );
+  }
 
   return (
     <Card title="Attention tracker" className="relative">
