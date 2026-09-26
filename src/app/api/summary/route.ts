@@ -82,6 +82,10 @@ export async function POST(request: Request) {
       .map((item) => item.text)
       .join(" ");
 
+    if (!passage.trim()) {
+      return Response.json({ ...local, source: "ai" });
+    }
+
     const lessonSubject = clientTitle || local.title || "the lesson";
     const model = process.env.ANTHROPIC_MODEL || DEFAULT_MODEL;
 

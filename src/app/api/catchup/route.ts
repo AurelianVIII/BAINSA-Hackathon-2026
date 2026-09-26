@@ -133,6 +133,10 @@ export async function POST(request: Request) {
       .map((item) => item.text)
       .join(" ");
 
+    if (!passage.trim()) {
+      return Response.json({ ...local, source: "ai" });
+    }
+
     const model = process.env.ANTHROPIC_MODEL || DEFAULT_MODEL;
 
     const response = await client.messages.create({

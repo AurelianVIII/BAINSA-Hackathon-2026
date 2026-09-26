@@ -22,7 +22,7 @@ import type {
  */
 
 const FILLER_REGEX =
-  /\b(uh|um|er|ah|you know|so basically|basically|sort of|kind of|as you can see|let's see|first of all|feel free to|check out my|make sure to|don't forget to|hit the like|subscribe to|welcome back to the channel|welcome to the channel|welcome back|welcome to my channel|thanks for watching|hey guys|what's up guys|what is up guys|leave a comment down below)\b/gi;
+  /\b(uh|um|er|ah|you know|so basically|basically|sort of|kind of|as you can see|let's see|first of all|feel free to|check out my|make sure to|don't forget to|hit the like|smash that like button|like and subscribe|turn on notifications|subscribe to|welcome back to the channel|welcome to the channel|welcome back|welcome to my channel|thanks for watching|hey guys|what's up guys|what is up guys|leave a comment down below|link in the description|in this video|without further ado)\b/gi;
 
 const SOUND_EFFECTS_REGEX = /\[(music|applause|laughter|cheering|chuckle|snicker|music \w+)\]/gi;
 
@@ -176,7 +176,15 @@ export function synthesizePassage(
     (lower.includes("unreal") || lower.includes("fortnite") || lower.includes("game")) &&
     (lower.includes("html") || lower.includes("javascript") || lower.includes("scratch") || lower.includes("gpt") || lower.includes("engine"))
   ) {
-    const aiModel = lower.includes("gpt") || lower.includes("gbt") ? "GPT-6" : "AI";
+    const aiModel = lower.includes("chatgpt")
+      ? "ChatGPT"
+      : lower.includes("gpt-4")
+        ? "GPT-4"
+        : lower.includes("gpt-5")
+          ? "GPT-5"
+          : lower.includes("gpt") || lower.includes("gbt")
+            ? "AI models"
+            : "AI";
     const env1 = lower.includes("html") || lower.includes("javascript") ? "from scratch using HTML and JavaScript" : "from scratch";
     const env2 = lower.includes("unreal") ? "inside Unreal Engine 5" : "a full game engine";
 
@@ -228,20 +236,26 @@ export function synthesizePassage(
     .slice(0, 3)
     .map((s) => {
       let t = s;
-      // Convert first person to educational third person
+      // Convert speech lead-ins to educational third person
       t = t.replace(/^(today\s+)?(i'm|i am)\s+(forcing|asking|trying to get)\s+/i, "The presenter tests ");
-      t = t.replace(/^(today\s+)?(i'm|i am)\s+(building|creating|making|coding)\s+/i, "The lesson demonstrates building ");
-      t = t.replace(/^(today\s+)?(we're|we are)\s+(looking at|learning about|talking about)\s+/i, "The lesson explores ");
+      t = t.replace(/^(today\s+)?(i'm|i am)\s+(building|creating|making|coding|implementing)\s+/i, "The lesson demonstrates building ");
+      t = t.replace(/^(today\s+)?(we're|we are)\s+(looking at|learning about|talking about|exploring)\s+/i, "The lesson explores ");
       t = t.replace(/^(now\s+)?(you guys may have noticed|you can see)\s+that\s+/i, "Notice that ");
-      t = t.replace(/\b(let's see which one is better)\b/i, "The goal is to compare performance across both implementations");
+      t = t.replace(/\b(let's see which one is better)\b/i, "the goal is to compare performance across both implementations");
       t = t.replace(/\binstead of just sending one prompt,?\s+i let it iterate across multiple turns\b/i, "the workflow iterates across multiple AI prompt turns rather than a single prompt");
       t = t.replace(/\bi decided to build upon it\b/i, "the project expands upon previous implementations");
-      t = t.replace(/\b(i|we)\s+made\b/i, "were developed in");
-      t = t.replace(/\b(i|we)\s+got\b/i, "includes");
-      t = t.replace(/\b(we're|we are)\b/i, "the lesson is");
-      t = t.replace(/\b(i'm|i am)\b/i, "the presenter is");
-      t = t.replace(/\b(my|our)\b/i, "the");
-      t = t.replace(/\b(i|we)\b/i, "the instructor");
+      // Subject and verb agreement for third person
+      t = t.replace(/\b(i|we)\s+have\b/gi, "the instructor has");
+      t = t.replace(/\b(i|we)\s+want\s+to\b/gi, "the goal is to");
+      t = t.replace(/\b(i|we)\s+will\b/gi, "the instructor will");
+      t = t.replace(/\b(i|we)\s+can\b/gi, "one can");
+      t = t.replace(/\b(i|we)\s+need\s+to\b/gi, "the next step is to");
+      t = t.replace(/\b(i|we)\s+made\b/gi, "were developed in");
+      t = t.replace(/\b(i|we)\s+got\b/gi, "includes");
+      t = t.replace(/\b(we're|we are)\b/gi, "the lesson is");
+      t = t.replace(/\b(i'm|i am)\b/gi, "the presenter is");
+      t = t.replace(/\b(my|our)\b/gi, "the");
+      t = t.replace(/\b(i|we)\b/gi, "the instructor");
       return capitalize(t.trim());
     })
     .join(" ");
