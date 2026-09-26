@@ -10,6 +10,27 @@ const LEVEL_STYLES: Record<"high" | "medium" | "low", { label: string; badge: st
   low: { label: "Attention: Low", badge: "bg-rose-500 text-white" },
 };
 
+/**
+ * Webcams are largely exclusive-access at the OS/driver level. In FocusAid's
+ * actual use case the student is often already in a Meet/Teams call holding
+ * the camera, so `NotReadableError` (device busy) is the most likely real
+ * failure — worth telling apart from "denied" or "no camera".
+ */
+function describeCameraError(error: unknown): string {
+  const name = error instanceof DOMException ? error.name : "";
+
+  if (name === "NotReadableError" || name === "TrackStartError") {
+    return "Camera is busy — probably already in use by Meet, Teams, or another app. Showing simulated view instead.";
+  }
+  if (name === "NotAllowedError" || name === "PermissionDeniedError") {
+    return "Camera permission denied — showing simulated view instead.";
+  }
+  if (name === "NotFoundError" || name === "DevicesNotFoundError") {
+    return "No camera found — showing simulated view instead.";
+  }
+  return "Camera unavailable — showing simulated view instead.";
+}
+
 function Bar({
   label,
   value,
@@ -52,6 +73,11 @@ function Bar({
  * fallback) — toggling it on only swaps the video feed underneath the
  * still-illustrative tracking box; it does not run any real face/gaze
  * detection, which stays out of scope for this prototype.
+ *
+ * Off-by-default also matters because in real usage the student is likely
+ * already in a Meet/Teams call holding the camera — webcams are largely
+ * exclusive-access devices, so a second `getUserMedia()` call can fail with
+ * `NotReadableError` for reasons that have nothing to do with permissions.
  */
 export function AttentionTracker({
   sample,
@@ -81,8 +107,8 @@ export function AttentionTracker({
         if (videoRef.current) videoRef.current.srcObject = stream;
         setCameraError(null);
       })
-      .catch(() => {
-        setCameraError("Camera unavailable — showing simulated view instead.");
+      .catch((error) => {
+        setCameraError(describeCameraError(error));
         setUseRealCamera(false);
       });
 
