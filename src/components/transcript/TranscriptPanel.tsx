@@ -1,6 +1,15 @@
 "use client";
 
-import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
+import {
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type KeyboardEvent,
+  type ReactNode,
+} from "react";
+import Fuse, { type FuseResultMatch } from "fuse.js";
 import type { TranscriptItem } from "@/types";
 
 const TABS = ["Live Captions", "Key Moments", "Visual Summary", "Notes"] as const;
@@ -132,6 +141,35 @@ function SlotArea({ children }: { children?: ReactNode }) {
   );
 }
 
+/**
+ * Wrap the matched ranges Fuse reports in <mark>. Without this a search
+ * result is just a filtered list — the point is seeing *why* a line matched.
+ */
+function highlight(text: string, matches?: readonly FuseResultMatch[]) {
+  const ranges = matches?.find((match) => match.key === "text")?.indices;
+  if (!ranges?.length) return text;
+
+  const parts: ReactNode[] = [];
+  let cursor = 0;
+
+  for (const [start, end] of [...ranges].sort((a, b) => a[0] - b[0])) {
+    if (start < cursor) continue; // Fuse can report overlapping ranges.
+    if (start > cursor) parts.push(text.slice(cursor, start));
+    parts.push(
+      <mark
+        key={start}
+        className="rounded bg-amber-200 px-0.5 text-inherit dark:bg-amber-500/40"
+      >
+        {text.slice(start, end + 1)}
+      </mark>
+    );
+    cursor = end + 1;
+  }
+
+  if (cursor < text.length) parts.push(text.slice(cursor));
+  return parts;
+}
+
 function CaptionList({
   items,
   currentTime,
@@ -150,9 +188,39 @@ function CaptionList({
   // Distinguishes our own scrolling from the user's, so the guard catches
   // the keyboard and the scrollbar too — not just the wheel.
   const selfScrolling = useRef(false);
+  const [query, setQuery] = useState("");
+
+  const fuse = useMemo(
+    () =>
+      new Fuse(items, {
+        keys: ["text", "topic"],
+        includeMatches: true,
+        // Tuned against the demo transcript: 0.3 returns exactly the lines
+        // that literally contain the term, while still finding "RuBisCO"
+        // from "rubsico". At 0.35 a search for "ATP" matched 11 of 12 lines.
+        threshold: 0.3,
+        ignoreLocation: true,
+        minMatchCharLength: 2,
+      }),
+    [items]
+  );
+
+  const trimmed = query.trim();
+  const isSearching = trimmed.length > 0;
+  const results = useMemo(
+    () => (isSearching ? fuse.search(trimmed) : null),
+    [fuse, trimmed, isSearching]
+  );
+
+  // Rows are either the whole lesson, or just what matched.
+  const rows = results
+    ? results.map((result) => ({ item: result.item, matches: result.matches }))
+    : items.map((item) => ({ item, matches: undefined }));
 
   useEffect(() => {
-    if (!following) return;
+    // While searching the active line may not be rendered at all, and
+    // yanking the list around under someone who is reading results is rude.
+    if (!following || isSearching) return;
 
     selfScrolling.current = true;
     activeRef.current?.scrollIntoView({
@@ -165,95 +233,184 @@ function CaptionList({
       selfScrolling.current = false;
     }, 700);
     return () => clearTimeout(release);
-  }, [currentTime, following]);
+  }, [currentTime, following, isSearching]);
 
   return (
-    <div className="relative h-full">
-      <ol
-        onScroll={() => {
-          if (!selfScrolling.current) setFollowing(false);
-        }}
-        className="flex h-full flex-col gap-1 overflow-y-auto p-3"
-      >
-        {items.map((item) => {
-          const isActive = currentTime >= item.start && currentTime < item.end;
-          const wasMissed = missedIds.includes(item.id);
+    <div className="flex h-full flex-col">
+      <div className="shrink-0 px-3 pt-3">
+        <div className="relative">
+          <input
+            type="search"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === "Escape") setQuery("");
+            }}
+            placeholder="Search the lesson…"
+            aria-label="Search the lesson transcript"
+            className="w-full rounded-lg border border-zinc-200 bg-zinc-50 py-1.5 pl-3 pr-16 text-sm text-zinc-800 placeholder:text-zinc-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+          />
+          {isSearching && (
+            <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs tabular-nums text-zinc-500 dark:text-zinc-400">
+              {rows.length} {rows.length === 1 ? "hit" : "hits"}
+            </span>
+          )}
+        </div>
+        {/* Announce result counts to screen readers without stealing focus. */}
+        <p aria-live="polite" className="sr-only">
+          {isSearching ? `${rows.length} results for ${trimmed}` : ""}
+        </p>
+      </div>
 
-          return (
-            <li key={item.id} ref={isActive ? activeRef : undefined}>
-              <button
-                type="button"
-                onClick={() => {
-                  onSeek(item.start);
-                  setFollowing(true);
-                }}
-                aria-label={
-                  wasMissed
-                    ? `${formatTime(item.start)}. Missed while you were away: ${item.text}`
-                    : `${formatTime(item.start)}. ${item.text}`
-                }
-                className={`flex w-full gap-3 rounded-lg border-l-4 px-2.5 py-2 text-left text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 ${
-                  wasMissed
-                    ? "border-l-purple-500 bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/40 dark:hover:bg-purple-900/40"
-                    : isActive
-                      ? "border-l-indigo-500 bg-indigo-50 dark:bg-indigo-950"
-                      : "border-l-transparent hover:bg-zinc-50 dark:hover:bg-zinc-800"
-                }`}
-              >
-                <span className="mt-0.5 shrink-0 text-xs tabular-nums text-zinc-400">
-                  {formatTime(item.start)}
-                </span>
-                <span className="flex-1 text-zinc-700 dark:text-zinc-300">
-                  {item.text}
-                </span>
-                {wasMissed && (
-                  <span
-                    aria-hidden
-                    className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-red-600 text-xs font-bold text-white"
+      <div className="relative min-h-0 flex-1">
+        {isSearching && rows.length === 0 ? (
+          <p className="p-3 text-sm text-zinc-500 dark:text-zinc-400">
+            Nothing in this lesson matches “{trimmed}”.
+          </p>
+        ) : (
+          <ol
+            onScroll={() => {
+              if (!selfScrolling.current) setFollowing(false);
+            }}
+            className="flex h-full flex-col gap-1 overflow-y-auto p-3"
+          >
+            {rows.map(({ item, matches }) => {
+              const isActive =
+                !isSearching &&
+                currentTime >= item.start &&
+                currentTime < item.end;
+              const wasMissed = missedIds.includes(item.id);
+
+              return (
+                <li key={item.id} ref={isActive ? activeRef : undefined}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onSeek(item.start);
+                      setFollowing(true);
+                    }}
+                    aria-label={
+                      wasMissed
+                        ? `${formatTime(item.start)}. Missed while you were away: ${item.text}`
+                        : `${formatTime(item.start)}. ${item.text}`
+                    }
+                    className={`flex w-full gap-3 rounded-lg border-l-4 px-2.5 py-2 text-left text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 ${
+                      wasMissed
+                        ? "border-l-purple-500 bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/40 dark:hover:bg-purple-900/40"
+                        : isActive
+                          ? "border-l-indigo-500 bg-indigo-50 dark:bg-indigo-950"
+                          : "border-l-transparent hover:bg-zinc-50 dark:hover:bg-zinc-800"
+                    }`}
                   >
-                    !
-                  </span>
-                )}
-              </button>
-            </li>
-          );
-        })}
-      </ol>
+                    <span className="mt-0.5 shrink-0 text-xs tabular-nums text-zinc-400">
+                      {formatTime(item.start)}
+                    </span>
+                    <span className="flex-1 text-zinc-700 dark:text-zinc-300">
+                      {highlight(item.text, matches)}
+                    </span>
+                    {wasMissed && (
+                      <span
+                        aria-hidden
+                        className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-red-600 text-xs font-bold text-white"
+                      >
+                        !
+                      </span>
+                    )}
+                  </button>
+                </li>
+              );
+            })}
+          </ol>
+        )}
 
-      {!following && (
-        <button
-          type="button"
-          onClick={() => setFollowing(true)}
-          className="absolute bottom-3 right-4 rounded-full bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white shadow-lg hover:bg-zinc-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 dark:bg-zinc-100 dark:text-zinc-900"
-        >
-          Follow along
-        </button>
-      )}
+        {!following && !isSearching && (
+          <button
+            type="button"
+            onClick={() => setFollowing(true)}
+            className="absolute bottom-3 right-4 rounded-full bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white shadow-lg hover:bg-zinc-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 dark:bg-zinc-100 dark:text-zinc-900"
+          >
+            Follow along
+          </button>
+        )}
+      </div>
     </div>
   );
 }
 
-/** Deliberately simple: a scratchpad with timestamped entries. */
+const NOTES_STORAGE_KEY = "focusaid:notes:v1";
+
+/**
+ * Notes live in localStorage rather than component state — a student losing
+ * a lesson's notes to an accidental refresh is a real failure, not a demo
+ * detail.
+ *
+ * Read through useSyncExternalStore so the server render and the first
+ * client render agree (both empty) and the stored value arrives without a
+ * hydration mismatch.
+ */
+const notesStore = {
+  listeners: new Set<() => void>(),
+  subscribe(listener: () => void) {
+    notesStore.listeners.add(listener);
+    return () => {
+      notesStore.listeners.delete(listener);
+    };
+  },
+  read() {
+    try {
+      return window.localStorage.getItem(NOTES_STORAGE_KEY) ?? "";
+    } catch {
+      // Private mode or blocked storage — notes still work for this session.
+      return "";
+    }
+  },
+  write(value: string) {
+    try {
+      window.localStorage.setItem(NOTES_STORAGE_KEY, value);
+    } catch {
+      // Ignore: the in-memory value below keeps the textarea usable.
+    }
+    notesStore.listeners.forEach((listener) => listener());
+  },
+};
+
 function NotesTab({ currentTime }: { currentTime: number }) {
-  const [notes, setNotes] = useState("");
+  const notes = useSyncExternalStore(
+    notesStore.subscribe,
+    notesStore.read,
+    () => ""
+  );
 
   return (
     <div className="flex h-full flex-col gap-2 p-3">
-      <button
-        type="button"
-        onClick={() =>
-          setNotes(
-            (text) =>
-              `${text}${text && !text.endsWith("\n") ? "\n" : ""}[${formatTime(currentTime)}] `
-          )
-        }
-        className="self-start rounded-lg border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
-      >
-        Add note at {formatTime(currentTime)}
-      </button>
+      <div className="flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          onClick={() =>
+            notesStore.write(
+              `${notes}${notes && !notes.endsWith("\n") ? "\n" : ""}[${formatTime(currentTime)}] `
+            )
+          }
+          className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+        >
+          Add note at {formatTime(currentTime)}
+        </button>
+        {notes && (
+          <button
+            type="button"
+            onClick={() => notesStore.write("")}
+            className="rounded-lg px-2.5 py-1.5 text-sm text-zinc-500 hover:bg-zinc-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 dark:text-zinc-400 dark:hover:bg-zinc-800"
+          >
+            Clear
+          </button>
+        )}
+        <span className="ml-auto text-xs text-zinc-400 dark:text-zinc-500">
+          Saved on this device
+        </span>
+      </div>
       <textarea
         value={notes}
-        onChange={(e) => setNotes(e.target.value)}
+        onChange={(event) => notesStore.write(event.target.value)}
         placeholder="Your notes for this lesson…"
         aria-label="Lesson notes"
         className="min-h-0 flex-1 resize-none rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-sm text-zinc-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
