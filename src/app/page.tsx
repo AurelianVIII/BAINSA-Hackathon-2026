@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { Header } from "@/components/layout/Header";
 import { VideoPanel } from "@/components/video/VideoPanel";
 import { TranscriptPanel } from "@/components/transcript/TranscriptPanel";
@@ -24,20 +24,6 @@ const LESSON_DURATION = 300;
 export default function Home() {
   const [currentTime, setCurrentTime] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
-
-  useEffect(() => {
-    if (!isPlaying) return;
-    const interval = setInterval(() => {
-      setCurrentTime((time) => {
-        if (time >= LESSON_DURATION) {
-          setIsPlaying(false);
-          return LESSON_DURATION;
-        }
-        return time + 1;
-      });
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [isPlaying]);
 
   const attentionSample = getSampleAt(attentionSamples, currentTime);
   const attentionLevel = getAttentionLevel(attentionSample);
