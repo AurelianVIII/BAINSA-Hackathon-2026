@@ -154,6 +154,44 @@ export function graphForNodeIds(ids: string[]) {
  * Always returns a diagram with at least one node — an empty panel during
  * the demo is worse than a slightly too-broad one.
  */
+/** Trim a passage to roughly `limit` characters on a sentence boundary. */
+function condense(text: string, limit = 320): string {
+  const clean = text.replace(/\s+/g, " ").trim();
+  if (clean.length <= limit) return clean;
+
+  const cut = clean.slice(0, limit);
+  const lastStop = cut.lastIndexOf(". ");
+  return lastStop > limit * 0.5 ? cut.slice(0, lastStop + 1) : `${cut.trim()}…`;
+}
+
+/**
+ * Summary for a lesson this module has no authored content for — anything
+ * transcribed live or pulled from a YouTube video.
+ *
+ * Reports what was actually said and draws no diagram. The authored graph
+ * below describes the demo lesson specifically, and rendering it for an
+ * unrelated lesson would state, with a diagram, things the teacher never
+ * said. For a product a deaf student relies on for access, no diagram beats
+ * a confident wrong one.
+ */
+function summariseUnknownLesson(
+  items: TranscriptItem[],
+  topic: string | null
+): VisualSummaryData {
+  const said = condense(items.map((item) => item.text).join(" "));
+
+  // "Live" is the bucket label the transcriber stamps on every line, not a
+  // subject — it tells the student nothing as a heading.
+  const heading = !topic || topic === "Live" ? "What you missed" : topic;
+
+  return {
+    title: heading,
+    text: said || "Nothing was captured during this stretch of the lesson.",
+    nodes: [],
+    edges: [],
+  };
+}
+
 export function buildVisualSummary(
   transcriptItems: TranscriptItem[],
   window: { start: number; end: number }
@@ -161,22 +199,13 @@ export function buildVisualSummary(
   const items = getItemsInWindow(transcriptItems, window);
   const topic = dominantTopic(items, window);
 
-  if (!topic) {
-    return {
-      title: "What you missed",
-      text: FALLBACK_TEXT,
-      nodes: FULL_NODES,
-      edges: FULL_EDGES,
-    };
-  }
+  // The authored text/diagram only covers the built-in demo lesson's
+  // topics. Anything else gets summarised from its own transcript.
+  const authored = topic ? TOPIC_TEXT[topic] : undefined;
+  if (!authored) return summariseUnknownLesson(items, topic);
 
-  const ids = TOPIC_NODE_IDS[topic];
+  const ids = topic ? TOPIC_NODE_IDS[topic] : undefined;
   const graph = ids ? subgraph(ids) : { nodes: FULL_NODES, edges: FULL_EDGES };
 
-  return {
-    title: topic,
-    text: TOPIC_TEXT[topic] ?? FALLBACK_TEXT,
-    nodes: graph.nodes,
-    edges: graph.edges,
-  };
+  return { title: topic as string, text: authored, nodes: graph.nodes, edges: graph.edges };
 }

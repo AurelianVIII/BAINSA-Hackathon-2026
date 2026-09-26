@@ -1,5 +1,6 @@
 import type {
   AttentionEvent,
+  AttentionEventType,
   AttentionSample,
   TimelineBand,
   TranscriptItem,
@@ -142,6 +143,84 @@ const LIVE_CONFUSION_THRESHOLD = 0.5;
  * of `buildTimelineBands` whenever real capture is active, so the pre-built
  * demo timeline isn't shown mixed in with genuine live readings.
  */
+/** Shortest run of real readings that counts as a missed moment. Below
+ *  this a glance away or a single frame of noise would raise an alert. */
+const LIVE_MIN_EVENT_SECONDS = 4;
+
+/**
+ * Turns recorded webcam readings into the same AttentionEvent shape the
+ * scripted demo uses, so the catch-up alert works on a real lesson.
+ *
+ * Without this the product's central loop only ran on the demo: real
+ * detection and real transcription both worked, but nothing joined them,
+ * so looking away during an actual lesson raised nothing.
+ *
+ * Deliberately reuses the thresholds `buildLiveTimelineBands` uses, so an
+ * alert can never disagree with the band drawn under it on the timeline.
+ *
+ * Seconds with no reading end the current run rather than extending it —
+ * we cannot claim someone was away across a stretch never observed.
+ */
+export function deriveAttentionEvents(
+  recordedSamples: Record<number, AttentionSample>,
+  duration: number
+): AttentionEvent[] {
+  const events: AttentionEvent[] = [];
+
+  let runType: AttentionEventType | null = null;
+  let runStart = 0;
+  let runEnd = 0;
+  let runPeak = 0;
+
+  const flush = () => {
+    if (runType !== null && runEnd - runStart >= LIVE_MIN_EVENT_SECONDS) {
+      events.push({
+        id: `live-${runType}-${runStart}`,
+        start: runStart,
+        end: runEnd,
+        type: runType,
+        confidence: Math.min(1, Math.max(0, runPeak)),
+      });
+    }
+    runType = null;
+  };
+
+  for (let t = 0; t <= duration; t++) {
+    const sample = recordedSamples[t];
+
+    let type: AttentionEventType | null = null;
+    let strength = 0;
+    if (sample) {
+      if (sample.gaze < LIVE_GAZE_AWAY_THRESHOLD) {
+        type = "looking-away";
+        strength = 1 - sample.gaze;
+      } else if (sample.confusion > LIVE_CONFUSION_THRESHOLD) {
+        type = "confusion";
+        strength = sample.confusion;
+      }
+    }
+
+    if (type === null) {
+      flush();
+      continue;
+    }
+
+    if (runType === type && t === runEnd + 1) {
+      runEnd = t;
+      runPeak = Math.max(runPeak, strength);
+    } else {
+      flush();
+      runType = type;
+      runStart = t;
+      runEnd = t;
+      runPeak = strength;
+    }
+  }
+
+  flush();
+  return events;
+}
+
 export function buildLiveTimelineBands(
   recordedSamples: Record<number, AttentionSample>,
   transcript: TranscriptItem[],

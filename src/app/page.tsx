@@ -23,13 +23,19 @@ import { attentionSamples } from "@/data/attention-samples";
 import { buildCaptions, getCaptionAt } from "@/data/captions";
 import {
   buildLiveTimelineBands,
+  deriveAttentionEvents,
   buildTimelineBands,
   getAttentionLevel,
   getSampleAt,
 } from "@/lib/attention";
 import { buildMissedWindow, getPendingAlert } from "@/lib/catchup";
 import { useYouTubeCaptions } from "@/lib/video/useYouTubeCaptions";
-import type { AttentionSample, MissedWindow, TranscriptItem } from "@/types";
+import type {
+  AttentionEvent,
+  AttentionSample,
+  MissedWindow,
+  TranscriptItem,
+} from "@/types";
 import {
   createLiveTranscriber,
   isLiveTranscriptionSupported,
@@ -37,6 +43,8 @@ import {
 } from "@/lib/transcription/live";
 
 const LESSON_DURATION = 300;
+/** Stable empty array, so memoised consumers do not see a new reference. */
+const NO_EVENTS: AttentionEvent[] = [];
 const LESSON_SUBJECT = "Biology";
 const LESSON_TITLE = "Photosynthesis and the Calvin Cycle";
 
@@ -300,30 +308,58 @@ export default function Home() {
       (_, t) => recordedSamples[t] ?? { t, gaze: 0.5, confusion: 0, engagement: 0.5 }
     );
   }, [hasRealCamera, recordedSamples, activeDuration]);
+  // Real detections, expressed as the same AttentionEvent shape the
+  // scripted demo uses, so everything downstream works unchanged.
+  const liveAttentionEvents = useMemo(
+    () =>
+      hasRealCamera
+        ? deriveAttentionEvents(recordedSamples, Math.floor(activeDuration))
+        : [],
+    [hasRealCamera, recordedSamples, activeDuration]
+  );
+
+  // Whose account of the lesson drives the alert:
+  // - camera on  -> what was actually detected, against whatever transcript
+  //                 is running. This is the product's core loop, and until
+  //                 now it only worked on the demo.
+  // - camera off -> the scripted narrative, which describes the demo lesson
+  //                 only and must never be projected onto a real one.
+  const alertEvents = useMemo(
+    () =>
+      hasRealCamera
+        ? liveAttentionEvents
+        : isDemoLesson
+          ? attentionEvents
+          : NO_EVENTS,
+    [hasRealCamera, liveAttentionEvents, isDemoLesson]
+  );
+  const alertTranscript = hasRealCamera ? activeTranscript : transcript;
+
   // Missed-line highlighting comes from PC2's buildMissedWindow, so the
   // transcript marks exactly the lines their alert offers to explain.
   const missedIds = useMemo(
     () =>
-      !isDemoLesson
-        ? []
-        : attentionEvents
-            .filter((event) =>
-              (MISSED_EVENT_TYPES as readonly string[]).includes(event.type)
-            )
-            .flatMap(
-              (event) =>
-                buildMissedWindow(attentionEvents, transcript, event)
-                  .transcriptIds
-            ),
-    [isDemoLesson]
+      alertEvents
+        .filter((event) =>
+          (MISSED_EVENT_TYPES as readonly string[]).includes(event.type)
+        )
+        .flatMap(
+          (event) =>
+            buildMissedWindow(alertEvents, alertTranscript, event).transcriptIds
+        ),
+    [alertEvents, alertTranscript]
   );
 
   // PC2 owns the "has the student just come back?" rule.
-  // The scripted attention narrative describes the demo lesson, so it must
-  // not be projected onto a real lesson (live-transcribed or YouTube).
-  const activeAlert = !isDemoLesson
-    ? null
-    : getPendingAlert(attentionEvents, transcript, currentTime, dismissedAlertIds);
+  const activeAlert =
+    alertEvents.length === 0
+      ? null
+      : getPendingAlert(
+          alertEvents,
+          alertTranscript,
+          currentTime,
+          dismissedAlertIds
+        );
   // Same demo-vs-real split as timelineSamples above — scripted bands in
   // demo mode, bands derived from genuine recordings in real-camera mode —
   // but neither applies to a live-transcribed lesson, which has no scripted
@@ -445,7 +481,10 @@ export default function Home() {
               the question the alert just asked, and keeping them adjacent
               means the payoff is on screen when the student acts on it.
               The manual catch-up goes last. */}
-          <AiSummaryPanel request={summaryRequest} />
+          <AiSummaryPanel
+            request={summaryRequest}
+            items={isDemoLesson ? undefined : activeTranscript}
+          />
 
           <CatchUpButton
             currentTime={currentTime}

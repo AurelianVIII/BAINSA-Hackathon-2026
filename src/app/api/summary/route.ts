@@ -7,6 +7,7 @@ import {
   graphForNodeIds,
 } from "@/lib/summary";
 import type { VisualSummaryData } from "@/lib/summary/types";
+import type { TranscriptItem } from "@/types";
 
 /**
  * Owned by the Summaries/Threads feature team (PC4).
@@ -55,11 +56,14 @@ Rules:
 export async function POST(request: Request) {
   let start = 0;
   let end = 0;
+  let clientItems: TranscriptItem[] | null = null;
 
   try {
     const body = await request.json();
     start = Number(body?.start) || 0;
     end = Number(body?.end) || 0;
+    // The lesson playing in the client, when it is not the demo one.
+    clientItems = Array.isArray(body?.items) ? (body.items as TranscriptItem[]) : null;
   } catch {
     return Response.json({ error: "Invalid JSON body" }, { status: 400 });
   }
@@ -73,7 +77,9 @@ export async function POST(request: Request) {
 
   // Deterministic result first — this is what ships if anything below
   // fails, and what the demo runs on when no API key is configured.
-  const local = buildVisualSummary(transcript, { start, end });
+  // Summarise whatever lesson the student is actually on.
+  const source = clientItems ?? transcript;
+  const local = buildVisualSummary(source, { start, end });
 
   if (!process.env.ANTHROPIC_API_KEY) {
     return Response.json({ ...local, source: "local" });
@@ -86,7 +92,7 @@ export async function POST(request: Request) {
       maxRetries: 0,
     });
 
-    const passage = getItemsInWindow(transcript, { start, end })
+    const passage = getItemsInWindow(source, { start, end })
       .map((item) => item.text)
       .join(" ");
 
