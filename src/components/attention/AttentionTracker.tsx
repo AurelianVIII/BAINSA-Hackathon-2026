@@ -68,7 +68,10 @@ export function AttentionTracker({
       >
         {label}
       </span>
-      <div className="relative flex aspect-[4/3] w-full items-center justify-center overflow-hidden rounded-lg bg-zinc-900">
+      {/* max-h caps the feed so the panel cannot eat the right column.
+          At 4/3 in a ~750px column this renders ~560px tall, which pushed
+          the catch-up alert and the AI summary below the fold. */}
+      <div className="relative flex aspect-[4/3] max-h-[240px] w-full items-center justify-center overflow-hidden rounded-lg bg-zinc-900">
         <svg viewBox="0 0 100 100" className="h-2/3 w-2/3 text-zinc-600" fill="currentColor">
           <circle cx="50" cy="38" r="18" />
           <path d="M20 95 C20 65 35 55 50 55 C65 55 80 65 80 95 Z" />
