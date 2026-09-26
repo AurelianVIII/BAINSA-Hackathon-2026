@@ -52,3 +52,49 @@ export interface CatchUpResult {
   startTime: number;
   endTime: number;
 }
+
+/** A stretch of lesson the student demonstrably missed. */
+export interface MissedWindow {
+  id: string;
+  /** Seconds from lesson start. */
+  start: number;
+  /** Seconds from lesson start. */
+  end: number;
+  reason: AttentionEventType;
+  /** TranscriptItem ids overlapping the window. */
+  transcriptIds: string[];
+  /** True if any overlapped item has importance: "high". */
+  hitKeyContent: boolean;
+}
+
+/** Short caption chunk for the burned-in live captions overlay. */
+export interface CaptionChunk {
+  id: string;
+  /** Parent TranscriptItem id. */
+  itemId: string;
+  /** Seconds from lesson start. */
+  start: number;
+  /** Seconds from lesson start. */
+  end: number;
+  text: string;
+}
+
+/** Nodes/edges for the generated summary flowchart. */
+export interface SummaryFlowNode {
+  id: string;
+  label: string;
+  kind: "input" | "process" | "output";
+}
+
+export interface SummaryFlowEdge {
+  from: string;
+  to: string;
+  label?: string;
+}
+
+export interface VisualSummaryData {
+  title: string;
+  text: string;
+  nodes: SummaryFlowNode[];
+  edges: SummaryFlowEdge[];
+}
