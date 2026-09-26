@@ -21,7 +21,12 @@ import { transcript } from "@/data/transcript";
 import { attentionEvents } from "@/data/attention-events";
 import { attentionSamples } from "@/data/attention-samples";
 import { buildCaptions, getCaptionAt } from "@/data/captions";
-import { buildTimelineBands, getAttentionLevel, getSampleAt } from "@/lib/attention";
+import {
+  buildLiveTimelineBands,
+  buildTimelineBands,
+  getAttentionLevel,
+  getSampleAt,
+} from "@/lib/attention";
 import { buildMissedWindow, getPendingAlert } from "@/lib/catchup";
 import type { AttentionSample, MissedWindow, TranscriptItem } from "@/types";
 import {
@@ -62,9 +67,12 @@ export default function Home() {
   // running the artificial clock at the same time would double-advance
   // currentTime, so the clock below defers to it whenever it's active.
   const [hasRealVideo, setHasRealVideo] = useState(false);
+  // Whether AttentionTracker's real webcam mode is on. While it is, the
+  // timeline shows only genuine recorded readings, not the pre-built demo
+  // curve/bands — the two are never mixed together.
+  const [hasRealCamera, setHasRealCamera] = useState(false);
   // Real webcam detections recorded by second, keyed on the same integer
-  // seconds as the simulated `attentionSamples` — overrides the simulated
-  // value at that second once a real reading exists.
+  // seconds as the simulated `attentionSamples`.
   const [recordedSamples, setRecordedSamples] = useState<Record<number, AttentionSample>>({});
   // Live speech-to-text. `liveItems === null` means the built-in demo
   // lesson is showing; an array means the transcript is being produced from
@@ -216,14 +224,16 @@ export default function Home() {
   const handleLiveAttentionSample = (sample: AttentionSample) => {
     setRecordedSamples((prev) => ({ ...prev, [Math.round(sample.t)]: sample }));
   };
-  // The wave shows real detected data wherever it's been recorded, falling
-  // back to the simulated curve everywhere else — the coloured bands stay
-  // tied to the scripted attentionEvents narrative regardless, since the
-  // missed-window/catch-up alert logic depends on that staying consistent.
-  const timelineSamples = useMemo(
-    () => attentionSamples.map((sample) => recordedSamples[sample.t] ?? sample),
-    [recordedSamples]
-  );
+  // Demo mode (default) shows the pre-built simulated curve, full stop.
+  // Real-camera mode shows only genuine recorded readings — a flat neutral
+  // baseline anywhere nothing's been recorded yet — never a blend of the
+  // two, so what's on screen is always honestly one or the other.
+  const timelineSamples = useMemo(() => {
+    if (!hasRealCamera) return attentionSamples;
+    return attentionSamples.map(
+      (sample) => recordedSamples[sample.t] ?? { t: sample.t, gaze: 0.5, confusion: 0, engagement: 0.5 }
+    );
+  }, [hasRealCamera, recordedSamples]);
   // Missed-line highlighting comes from PC2's buildMissedWindow, so the
   // transcript marks exactly the lines their alert offers to explain.
   const missedIds = useMemo(
@@ -248,13 +258,15 @@ export default function Home() {
   const activeAlert = isLiveLesson
     ? null
     : getPendingAlert(attentionEvents, transcript, currentTime, dismissedAlertIds);
-  const timelineBands = useMemo(
-    () =>
-      isLiveLesson
-        ? []
-        : buildTimelineBands(attentionEvents, transcript, LESSON_DURATION),
-    [isLiveLesson]
-  );
+  // Same demo-vs-real split as timelineSamples above — scripted bands in
+  // demo mode, bands derived from genuine recordings in real-camera mode —
+  // but neither applies to a live-transcribed lesson, which has no scripted
+  // narrative to project bands from in the first place.
+  const timelineBands = useMemo(() => {
+    if (isLiveLesson) return [];
+    if (!hasRealCamera) return buildTimelineBands(attentionEvents, transcript, LESSON_DURATION);
+    return buildLiveTimelineBands(recordedSamples, transcript, LESSON_DURATION);
+  }, [isLiveLesson, hasRealCamera, recordedSamples]);
 
   const handleSeek = (time: number) => {
     setCurrentTime(Math.max(0, Math.min(time, activeDuration)));
@@ -324,6 +336,7 @@ export default function Home() {
             sample={attentionSample}
             level={attentionLevel}
             onLiveSample={handleLiveAttentionSample}
+            onRealCameraChange={setHasRealCamera}
           />
 
           <MissedAlert

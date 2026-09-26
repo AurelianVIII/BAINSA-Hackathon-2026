@@ -55,6 +55,41 @@ export function getAttentionLevel(
   return "low";
 }
 
+type BandSegment = { band: TimelineBand; start: number; end: number };
+
+/** Collapses a per-second band array into contiguous segments. */
+function runLengthEncodeBands(perSecond: TimelineBand[], duration: number): BandSegment[] {
+  const bands: BandSegment[] = [];
+  let segStart = 0;
+  let segBand = perSecond[0];
+  for (let t = 1; t <= duration; t++) {
+    if (perSecond[t] !== segBand) {
+      bands.push({ band: segBand, start: segStart, end: t });
+      segStart = t;
+      segBand = perSecond[t];
+    }
+  }
+  bands.push({ band: segBand, start: segStart, end: duration });
+  return bands;
+}
+
+/** Marks transcript lines tagged `importance: "high"` as the "key" band,
+ * overwriting whatever was there — key content always wins ties. Shared by
+ * both the scripted and the live band builders since it's real lesson
+ * content either way, not simulated attention data. */
+function applyKeyContentBand(
+  perSecond: TimelineBand[],
+  transcript: TranscriptItem[],
+  duration: number
+) {
+  for (const item of transcript) {
+    if (item.importance !== "high") continue;
+    const start = Math.max(0, Math.round(item.start));
+    const end = Math.min(duration, Math.round(item.end));
+    for (let t = start; t <= end; t++) perSecond[t] = "key";
+  }
+}
+
 /** low-attention is grouped with "away" — both represent reduced attention. */
 const EVENT_BAND: Record<AttentionEvent["type"], TimelineBand> = {
   "looking-away": "away",
@@ -65,16 +100,16 @@ const EVENT_BAND: Record<AttentionEvent["type"], TimelineBand> = {
 const RECOVERY_WINDOW = 6;
 
 /**
- * Segments the full lesson duration into coloured timeline bands: "key"
- * (purple) where the transcript marks high importance, "away"/"confused"
- * from attention events, a short "recovered" band right after an event
- * ends, and "high" everywhere else. Key content always wins ties.
+ * Segments the full lesson duration into coloured timeline bands from the
+ * scripted demo data: "key" (purple) where the transcript marks high
+ * importance, "away"/"confused" from the simulated attentionEvents, a short
+ * "recovered" band right after an event ends, and "high" everywhere else.
  */
 export function buildTimelineBands(
   events: AttentionEvent[],
   transcript: TranscriptItem[],
   duration: number
-): { band: TimelineBand; start: number; end: number }[] {
+): BandSegment[] {
   const perSecond: TimelineBand[] = new Array(duration + 1).fill("high");
 
   for (const event of events) {
@@ -89,24 +124,39 @@ export function buildTimelineBands(
     }
   }
 
-  for (const item of transcript) {
-    if (item.importance !== "high") continue;
-    const start = Math.max(0, Math.round(item.start));
-    const end = Math.min(duration, Math.round(item.end));
-    for (let t = start; t <= end; t++) perSecond[t] = "key";
+  applyKeyContentBand(perSecond, transcript, duration);
+
+  return runLengthEncodeBands(perSecond, duration);
+}
+
+/** Below this gaze, a recorded live second reads as "away". */
+const LIVE_GAZE_AWAY_THRESHOLD = 0.4;
+/** Above this confusion, a recorded live second reads as "confused" (only
+ * checked once gaze is high enough that it isn't already "away"). */
+const LIVE_CONFUSION_THRESHOLD = 0.5;
+
+/**
+ * Segments the lesson duration into coloured timeline bands from *real*
+ * recorded webcam detections instead of the scripted demo data — seconds
+ * with no recording yet stay "high" (neutral), not simulated. Used instead
+ * of `buildTimelineBands` whenever real capture is active, so the pre-built
+ * demo timeline isn't shown mixed in with genuine live readings.
+ */
+export function buildLiveTimelineBands(
+  recordedSamples: Record<number, AttentionSample>,
+  transcript: TranscriptItem[],
+  duration: number
+): BandSegment[] {
+  const perSecond: TimelineBand[] = new Array(duration + 1).fill("high");
+
+  for (let t = 0; t <= duration; t++) {
+    const sample = recordedSamples[t];
+    if (!sample) continue;
+    if (sample.gaze < LIVE_GAZE_AWAY_THRESHOLD) perSecond[t] = "away";
+    else if (sample.confusion > LIVE_CONFUSION_THRESHOLD) perSecond[t] = "confused";
   }
 
-  const bands: { band: TimelineBand; start: number; end: number }[] = [];
-  let segStart = 0;
-  let segBand = perSecond[0];
-  for (let t = 1; t <= duration; t++) {
-    if (perSecond[t] !== segBand) {
-      bands.push({ band: segBand, start: segStart, end: t });
-      segStart = t;
-      segBand = perSecond[t];
-    }
-  }
-  bands.push({ band: segBand, start: segStart, end: duration });
+  applyKeyContentBand(perSecond, transcript, duration);
 
-  return bands;
+  return runLengthEncodeBands(perSecond, duration);
 }

@@ -27,6 +27,12 @@ const WHITEBOARD_POINTS = [
  * playback closely, not so frequent it spams state updates. */
 const TIME_SYNC_INTERVAL_MS = 250;
 
+/** How long to trust a just-issued seekTo over the polled position, in ms.
+ * Right after a seek, getCurrentTime() can briefly report a stale or
+ * buffering-reset value — polling that straight into onSeek snapped every
+ * manual seek back to whatever the player hadn't caught up from yet. */
+const SEEK_SETTLE_MS = 800;
+
 /**
  * The lesson stage. Defaults to a CSS composition (no real video file needed
  * for the demo), with an option to swap in a real, controllable YouTube
@@ -76,6 +82,7 @@ export function VideoPanel({
   const lastKnownTimeRef = useRef(currentTime);
   const isPlayingRef = useRef(isPlaying);
   const pollIntervalRef = useRef<number | null>(null);
+  const lastSeekIssuedAtRef = useRef(0);
 
   useEffect(() => {
     isPlayingRef.current = isPlaying;
@@ -113,6 +120,7 @@ export function VideoPanel({
             isPlayerReadyRef.current = true;
             event.target.setPlaybackRate(speed);
             event.target.seekTo(currentTime, true);
+            lastSeekIssuedAtRef.current = performance.now();
             if (isPlaying) event.target.playVideo();
 
             // The real player's own clock is the source of truth from here
@@ -121,6 +129,11 @@ export function VideoPanel({
             // visibly drift out of sync with the actual video.
             pollIntervalRef.current = window.setInterval(() => {
               if (!isPlayingRef.current || !playerRef.current) return;
+              // Skip right after a seek we issued — getCurrentTime() can
+              // briefly report a stale/pre-seek value while the player is
+              // still catching up, which would otherwise snap the seek
+              // straight back to where it was.
+              if (performance.now() - lastSeekIssuedAtRef.current < SEEK_SETTLE_MS) return;
               onSeek(playerRef.current.getCurrentTime());
             }, TIME_SYNC_INTERVAL_MS);
           },
@@ -147,6 +160,7 @@ export function VideoPanel({
     if (!videoId || !isPlayerReadyRef.current || !playerRef.current) return;
     if (isPlaying) {
       playerRef.current.seekTo(currentTime, true);
+      lastSeekIssuedAtRef.current = performance.now();
       playerRef.current.playVideo();
     } else {
       playerRef.current.pauseVideo();
@@ -166,6 +180,7 @@ export function VideoPanel({
     lastKnownTimeRef.current = currentTime;
     if (!videoId || !isPlayerReadyRef.current || !playerRef.current || !jumped) return;
     playerRef.current.seekTo(currentTime, true);
+    lastSeekIssuedAtRef.current = performance.now();
   }, [currentTime, videoId]);
 
   const handleLoadVideo = () => {
