@@ -4,7 +4,11 @@ import { useEffect, useRef, useState } from "react";
 import type { FaceLandmarker } from "@mediapipe/tasks-vision";
 import { Card } from "@/components/ui/Card";
 import { getAttentionLevel } from "@/lib/attention";
-import { loadFaceLandmarker, sampleFromFaceLandmarkerResult } from "@/lib/attention/real-tracker";
+import {
+  detectForVideo,
+  loadFaceLandmarker,
+  sampleFromFaceLandmarkerResult,
+} from "@/lib/attention/real-tracker";
 import type { AttentionSample } from "@/types";
 
 /** How often to actually run inference — not every frame, to keep CPU/battery low. */
@@ -172,8 +176,10 @@ export function AttentionTracker({
           ) {
             lastInference = now;
             try {
-              const result = landmarker.detectForVideo(video, now);
-              const newSample = sampleFromFaceLandmarkerResult(result, currentTimeRef.current);
+              const result = detectForVideo(landmarker, video, now);
+              const newSample = result
+                ? sampleFromFaceLandmarkerResult(result, currentTimeRef.current)
+                : null;
               setLiveSample(newSample);
               if (newSample) onLiveSampleRef.current?.(newSample);
               setDetectionError(null);

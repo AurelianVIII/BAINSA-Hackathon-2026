@@ -35,6 +35,37 @@ export function loadFaceLandmarker(): Promise<FaceLandmarker> {
   return landmarkerPromise;
 }
 
+/**
+ * MediaPipe's VIDEO-mode `detectForVideo` requires every timestamp given to
+ * a particular landmarker instance to be strictly greater than the last one
+ * it received — enforced inside the compiled WASM graph runner, so it
+ * throws there rather than failing in a way a caller's own try/catch can
+ * anticipate. `landmarkerPromise` above is a module-wide singleton that
+ * outlives any one component mount, so this guard lives at the same scope:
+ * React 18 Strict Mode's dev double-effect-invocation can briefly run two
+ * independent rAF loops against that same shared instance, and each loop's
+ * own local timing state has no way to know about the other's calls.
+ */
+let lastVideoTimestampMs = -1;
+
+/**
+ * Runs Face Landmarker VIDEO-mode inference for one frame, guarding the
+ * timestamp requirement above. Returns null (treated the same as "no face
+ * detected") instead of throwing if the video has no decoded frame yet.
+ */
+export function detectForVideo(
+  landmarker: FaceLandmarker,
+  video: HTMLVideoElement,
+  timestampMs: number
+): FaceLandmarkerResult | null {
+  if (video.readyState < 2 || video.videoWidth === 0 || video.videoHeight === 0) {
+    return null;
+  }
+  const safeTimestamp = Math.max(Math.round(timestampMs), lastVideoTimestampMs + 1);
+  lastVideoTimestampMs = safeTimestamp;
+  return landmarker.detectForVideo(video, safeTimestamp);
+}
+
 function blendshapeScore(result: FaceLandmarkerResult, name: string): number {
   return result.faceBlendshapes?.[0]?.categories.find((c) => c.categoryName === name)?.score ?? 0;
 }
