@@ -221,8 +221,14 @@ export default function Home() {
         }
       : (activeCaptions.at(-1) ?? null)
     : getCaptionAt(activeCaptions, currentTime);
+  // Write-once per second: the first real reading at a given point on the
+  // timeline locks it in for the rest of the session. Without this,
+  // rewinding back over an already-recorded stretch (or just pausing on one
+  // with the camera still running) would keep overwriting what actually
+  // happened there with whatever's happening now.
   const handleLiveAttentionSample = (sample: AttentionSample) => {
-    setRecordedSamples((prev) => ({ ...prev, [Math.round(sample.t)]: sample }));
+    const key = Math.round(sample.t);
+    setRecordedSamples((prev) => (key in prev ? prev : { ...prev, [key]: sample }));
   };
   // Demo mode (default) shows the pre-built simulated curve, full stop.
   // Real-camera mode shows only genuine recorded readings — a flat neutral
