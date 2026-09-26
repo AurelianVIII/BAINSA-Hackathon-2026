@@ -44,9 +44,12 @@ const CATCHUP_SCHEMA = {
 const SYSTEM_PROMPT = `Summarise missed lesson content for a Deaf student who reads captions.
 
 Rules:
-- Plain language and short sentences.
+- Synthesize in objective, third-person educational language.
+- CRITICAL: Never copy verbatim first-person speech quotes or conversational snippets (e.g. do NOT write "Today I'm forcing...", "You guys may have noticed...", "I'm going to...").
+- Filter out YouTube banter, filler words, gaming commentary, and sponsor mentions.
+- Plain language and clear sentences.
 - No idioms, and no references to hearing ("as you heard", "as mentioned").
-- Three bullets maximum.
+- Three bullets maximum: each should be an informative conceptual takeaway with context.
 - The key idea is one sentence: the single most important takeaway.
 - The bridge answers "how did we get here": one to two sentences narrating
   the path from the start of the passage to the end, in order — connective

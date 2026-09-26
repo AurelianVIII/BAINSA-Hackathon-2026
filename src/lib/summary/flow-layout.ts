@@ -25,9 +25,11 @@ function chainIndex(id: string) {
 }
 
 export function layoutChain(nodes: SummaryFlowNode[]) {
-  const ordered = [...nodes].sort(
-    (a, b) => chainIndex(a.id) - chainIndex(b.id)
-  );
+  // If all nodes are in CHAIN_ORDER, sort by chain order; otherwise preserve the caller's node order
+  const isDemoChain = nodes.every((n) => CHAIN_ORDER.includes(n.id));
+  const ordered = isDemoChain
+    ? [...nodes].sort((a, b) => chainIndex(a.id) - chainIndex(b.id))
+    : [...nodes];
 
   const positions = new Map(
     ordered.map((node, i) => [

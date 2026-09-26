@@ -128,6 +128,7 @@ function dominantTopic(items: TranscriptItem[], window: { start: number; end: nu
   const seconds: Record<string, number> = {};
 
   for (const item of items) {
+    if (!item.topic) continue;
     const overlap =
       Math.min(item.end, window.end) - Math.max(item.start, window.start);
     if (overlap > 0) seconds[item.topic] = (seconds[item.topic] ?? 0) + overlap;

@@ -64,7 +64,20 @@ export function buildBridge(
 
   const topics: string[] = [];
   for (const item of missed) {
-    if (topics[topics.length - 1] !== item.topic) topics.push(item.topic);
+    const t = item.topic?.trim();
+    if (
+      t &&
+      t !== "What you missed" &&
+      t !== "Live" &&
+      !t.startsWith("Minutes ") &&
+      topics[topics.length - 1] !== t
+    ) {
+      topics.push(t);
+    }
+  }
+
+  if (topics.length === 0) {
+    return "The instructor continued explaining the current material during this segment.";
   }
 
   if (topics.length === 1) {
