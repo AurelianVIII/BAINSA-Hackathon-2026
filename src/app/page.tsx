@@ -17,14 +17,11 @@ import { AttentionTimeline } from "@/components/attention/AttentionTimeline";
 import { AiSummaryPanel } from "@/components/summary/AiSummaryPanel";
 import { VisualSummaryTab } from "@/components/summary/VisualSummaryTab";
 import { KeyMoments } from "@/components/threads/KeyMoments";
-import { transcript } from "@/data/transcript";
-import { attentionEvents } from "@/data/attention-events";
 import { attentionSamples } from "@/data/attention-samples";
 import { buildCaptions, getCaptionAt } from "@/data/captions";
 import {
   buildLiveTimelineBands,
   deriveAttentionEvents,
-  buildTimelineBands,
   getAttentionLevel,
   getSampleAt,
 } from "@/lib/attention";
@@ -45,7 +42,6 @@ import {
 const LESSON_DURATION = 300;
 /** Stable empty array, so memoised consumers do not see a new reference. */
 const NO_EVENTS: AttentionEvent[] = [];
-const NO_ITEMS: TranscriptItem[] = [];
 const LESSON_SUBJECT = "Biology";
 const LESSON_TITLE = "Photosynthesis and the Calvin Cycle";
 
@@ -157,12 +153,6 @@ export default function Home() {
     setInterimText("");
   };
 
-  const useDemoLesson = () => {
-    stopTranscription();
-    setLiveItems(null);
-    setCurrentTime(0);
-  };
-
   // Loading (or clearing) a YouTube video switches the lesson over to it,
   // so any live transcription of the room stops.
   const handleVideoChange = (id: string | null) => {
@@ -232,16 +222,13 @@ export default function Home() {
   }, [isPlaying, speed, isYouTube, isTranscribing]);
 
   // Whichever transcript the lesson is currently running on: live speech
-  // when actively transcribing, otherwise YouTube video captions (if loaded),
-  // then the demo script.
+  // when actively transcribing, otherwise YouTube video captions (if loaded).
   const isLiveLesson = liveItems !== null;
-  const isYouTubeLesson = isYouTube && !isLiveLesson;
-  const isDemoLesson = !isLiveLesson && !isYouTube;
-  const activeTranscript =
-    liveItems ??
-    (isYouTube
-      ? (youtubeReady?.items ?? NO_ITEMS)
-      : transcript);
+  const isYouTubeLesson = isYouTube && youtubeReady !== null;
+  const activeTranscript = useMemo(
+    () => liveItems ?? youtubeReady?.items ?? [],
+    [liveItems, youtubeReady]
+  );
   const activeDuration = isLiveLesson
     ? Math.max(
         LIVE_MIN_DURATION,
@@ -329,20 +316,13 @@ export default function Home() {
 
   // Whose account of the lesson drives the alert:
   // - camera on  -> what was actually detected, against whatever transcript
-  //                 is running. This is the product's core loop, and until
-  //                 now it only worked on the demo.
-  // - camera off -> the scripted narrative, which describes the demo lesson
-  //                 only and must never be projected onto a real one.
+  //                 is running. This is the product's core loop.
+  // - camera off -> no attention data (no scripted demo lesson to fall back to).
   const alertEvents = useMemo(
-    () =>
-      hasRealCamera
-        ? liveAttentionEvents
-        : isDemoLesson
-          ? attentionEvents
-          : NO_EVENTS,
-    [hasRealCamera, liveAttentionEvents, isDemoLesson]
+    () => (hasRealCamera ? liveAttentionEvents : NO_EVENTS),
+    [hasRealCamera, liveAttentionEvents]
   );
-  const alertTranscript = isDemoLesson ? transcript : activeTranscript;
+  const alertTranscript = activeTranscript;
 
   // Missed-line highlighting comes from PC2's buildMissedWindow, so the
   // transcript marks exactly the lines their alert offers to explain.
@@ -379,7 +359,7 @@ export default function Home() {
       return buildLiveTimelineBands(recordedSamples, activeTranscript, Math.floor(activeDuration));
     }
     if (isYouTubeLesson) return [];
-    return buildTimelineBands(attentionEvents, transcript, LESSON_DURATION);
+    return [];
   }, [isLiveLesson, isYouTubeLesson, hasRealCamera, recordedSamples, activeTranscript, activeDuration]);
 
   const handleSeek = (time: number) => {
@@ -437,7 +417,6 @@ export default function Home() {
             onVideoPlayingChange={setIsPlaying}
             onStartTranscription={startTranscription}
             onStopTranscription={stopTranscription}
-            onUseDemoLesson={useDemoLesson}
           />
           <TranscriptPanel
             items={activeTranscript}
@@ -492,12 +471,12 @@ export default function Home() {
               The manual catch-up goes last. */}
           <AiSummaryPanel
             request={summaryRequest}
-            items={isDemoLesson ? undefined : activeTranscript}
+            items={activeTranscript}
           />
 
           <CatchUpButton
             currentTime={currentTime}
-            items={isDemoLesson ? undefined : activeTranscript}
+            items={activeTranscript}
           />
         </div>
       </div>

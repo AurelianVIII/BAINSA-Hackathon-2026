@@ -103,7 +103,7 @@ export function VideoPanel({
   onVideoPlayingChange: (playing: boolean) => void;
   onStartTranscription: () => void;
   onStopTranscription: () => void;
-  onUseDemoLesson: () => void;
+  onUseDemoLesson?: () => void;
 }) {
   const [urlDraft, setUrlDraft] = useState("");
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -290,7 +290,7 @@ export function VideoPanel({
                 />
                 Stop transcribing
               </button>
-            ) : (
+            ) : onUseDemoLesson ? (
               <button
                 type="button"
                 onClick={onUseDemoLesson}
@@ -298,7 +298,7 @@ export function VideoPanel({
               >
                 Use mock lesson
               </button>
-            )}
+            ) : null}
           </div>
         ) : (
           <div className="flex shrink-0 items-center gap-1.5">
