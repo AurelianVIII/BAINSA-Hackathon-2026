@@ -1,6 +1,7 @@
 "use client";
 
 import { useRef, useState } from "react";
+import { getAttentionLevel, getSampleAt } from "@/lib/attention";
 import type { AttentionSample, TimelineBand } from "@/types";
 
 const BAND_COLOR: Record<TimelineBand, string> = {
@@ -18,6 +19,12 @@ const LEGEND: { band: TimelineBand; label: string }[] = [
   { band: "key", label: "Key information" },
   { band: "recovered", label: "Back on track" },
 ];
+
+const LEVEL_STYLES: Record<"high" | "medium" | "low", { label: string; badge: string }> = {
+  high: { label: "Attention: High", badge: "bg-emerald-500 text-white" },
+  medium: { label: "Attention: Medium", badge: "bg-amber-500 text-white" },
+  low: { label: "Attention: Low", badge: "bg-rose-500 text-white" },
+};
 
 /** Catmull-Rom through `points`, converted to cubic bezier segments. */
 function smoothPath(points: { x: number; y: number }[]) {
@@ -56,12 +63,18 @@ export function AttentionTimeline({
   duration,
   currentTime,
   onSeek,
+  sample,
+  level,
+  useRealCamera,
 }: {
   bands: { band: TimelineBand; start: number; end: number }[];
   samples: AttentionSample[];
   duration: number;
   currentTime: number;
   onSeek: (time: number) => void;
+  sample?: AttentionSample;
+  level?: "high" | "medium" | "low";
+  useRealCamera?: boolean;
 }) {
   const [isExpanded, setIsExpanded] = useState(false);
   const minimalRef = useRef<HTMLDivElement>(null);
@@ -90,15 +103,55 @@ export function AttentionTimeline({
         )
       : null;
 
+  const currentSample = sample ?? getSampleAt(samples, currentTime);
+  const currentEffectiveLevel = level ?? getAttentionLevel(currentSample);
+
+  // If hovering over a point in time on the timeline, inspect that moment's metrics;
+  // otherwise show current playback/live metrics
+  const activeSample = hoverSample ?? currentSample;
+  const activeLevel = hoverSample ? getAttentionLevel(hoverSample) : currentEffectiveLevel;
+  const { label: activeLevelLabel, badge: activeBadgeClass } = LEVEL_STYLES[activeLevel];
+
+  const gazePct = Math.round(activeSample.gaze * 100);
+  const confusionPct = Math.round(activeSample.confusion * 100);
+  const engagementPct = Math.round(activeSample.engagement * 100);
+
   return (
     <div className="relative">
       {/* Floating Detailed Panel (Floats in above the bar on arrow press) */}
       {isExpanded && (
         <div className="absolute bottom-full mb-2 inset-x-0 z-40 rounded-xl border border-zinc-200 bg-white p-4 shadow-2xl dark:border-zinc-800 dark:bg-zinc-900 animate-in fade-in slide-in-from-bottom-2 duration-200">
-          <div className="mb-2 flex items-center justify-between">
-            <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
-              Attention &amp; understanding timeline
-            </h3>
+          <div className="mb-3 flex flex-wrap items-center justify-between gap-2 border-b border-zinc-100 pb-2.5 dark:border-zinc-800">
+            <div className="flex flex-wrap items-center gap-2">
+              <h3 className="text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+                Attention &amp; understanding timeline
+              </h3>
+              <span
+                role="status"
+                aria-live="polite"
+                className={`rounded-full px-2 py-0.5 text-xs font-semibold ${activeBadgeClass}`}
+              >
+                {activeLevelLabel}
+              </span>
+              {useRealCamera ? (
+                <span className="flex items-center gap-1 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500 animate-pulse" />
+                  Live webcam
+                </span>
+              ) : (
+                <span className="text-xs text-zinc-400">Simulated signal</span>
+              )}
+              {hoverSample ? (
+                <span className="rounded bg-zinc-100 px-1.5 py-0.5 text-xs font-medium text-zinc-600 dark:bg-zinc-800 dark:text-zinc-300">
+                  Inspecting at {formatTime(hoverSample.t)}
+                </span>
+              ) : (
+                <span className="text-xs text-zinc-400">
+                  Current: {formatTime(currentTime)}
+                </span>
+              )}
+            </div>
+
             <button
               type="button"
               onClick={() => setIsExpanded(false)}
@@ -107,6 +160,69 @@ export function AttentionTimeline({
               <span>Minimize</span>
               <span aria-hidden className="text-[10px]">▼</span>
             </button>
+          </div>
+
+          {/* Attention Metrics */}
+          <div className="mb-3.5 grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+            <div className="rounded-lg border border-zinc-100 bg-zinc-50/80 p-2.5 dark:border-zinc-800/80 dark:bg-zinc-800/50">
+              <div className="mb-1 flex items-center justify-between text-xs">
+                <span className="font-medium text-zinc-600 dark:text-zinc-300">Gaze to screen</span>
+                <span className="font-semibold tabular-nums text-zinc-800 dark:text-zinc-100">{gazePct}%</span>
+              </div>
+              <div
+                role="progressbar"
+                aria-label="Gaze to screen"
+                aria-valuenow={gazePct}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                className="h-2 w-full overflow-hidden rounded-full bg-zinc-200/70 dark:bg-zinc-700/60"
+              >
+                <div
+                  className="h-full rounded-full bg-emerald-500 transition-all duration-300 motion-reduce:transition-none"
+                  style={{ width: `${gazePct}%` }}
+                />
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-zinc-100 bg-zinc-50/80 p-2.5 dark:border-zinc-800/80 dark:bg-zinc-800/50">
+              <div className="mb-1 flex items-center justify-between text-xs">
+                <span className="font-medium text-zinc-600 dark:text-zinc-300">Confusion (brow)</span>
+                <span className="font-semibold tabular-nums text-zinc-800 dark:text-zinc-100">{confusionPct}%</span>
+              </div>
+              <div
+                role="progressbar"
+                aria-label="Confusion (brow)"
+                aria-valuenow={confusionPct}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                className="h-2 w-full overflow-hidden rounded-full bg-zinc-200/70 dark:bg-zinc-700/60"
+              >
+                <div
+                  className="h-full rounded-full bg-rose-500 transition-all duration-300 motion-reduce:transition-none"
+                  style={{ width: `${confusionPct}%` }}
+                />
+              </div>
+            </div>
+
+            <div className="rounded-lg border border-zinc-100 bg-zinc-50/80 p-2.5 dark:border-zinc-800/80 dark:bg-zinc-800/50">
+              <div className="mb-1 flex items-center justify-between text-xs">
+                <span className="font-medium text-zinc-600 dark:text-zinc-300">Engagement</span>
+                <span className="font-semibold tabular-nums text-zinc-800 dark:text-zinc-100">{engagementPct}%</span>
+              </div>
+              <div
+                role="progressbar"
+                aria-label="Engagement"
+                aria-valuenow={engagementPct}
+                aria-valuemin={0}
+                aria-valuemax={100}
+                className="h-2 w-full overflow-hidden rounded-full bg-zinc-200/70 dark:bg-zinc-700/60"
+              >
+                <div
+                  className="h-full rounded-full bg-indigo-500 transition-all duration-300 motion-reduce:transition-none"
+                  style={{ width: `${engagementPct}%` }}
+                />
+              </div>
+            </div>
           </div>
 
           <div

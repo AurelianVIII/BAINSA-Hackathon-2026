@@ -272,7 +272,12 @@ export default function Home() {
         ? `${youtubeCaptions.message} You can use “Transcribe this lesson” to caption it live.`
         : null;
 
-  const attentionSample = getSampleAt(attentionSamples, currentTime);
+  const [latestLiveSample, setLatestLiveSample] = useState<AttentionSample | null>(null);
+  const currentRecordedSample = hasRealCamera
+    ? (latestLiveSample ?? recordedSamples[Math.round(currentTime)])
+    : undefined;
+  const attentionSample =
+    currentRecordedSample ?? getSampleAt(attentionSamples, currentTime);
   const attentionLevel = getAttentionLevel(attentionSample);
   // Live captions show the phrase still being spoken, then the last one
   // committed. Waiting for the recogniser to finalise a sentence would put
@@ -294,6 +299,7 @@ export default function Home() {
   // with the camera still running) would keep overwriting what actually
   // happened there with whatever's happening now.
   const handleLiveAttentionSample = (sample: AttentionSample) => {
+    setLatestLiveSample(sample);
     const key = Math.round(sample.t);
     setRecordedSamples((prev) => (key in prev ? prev : { ...prev, [key]: sample }));
   };
@@ -529,6 +535,9 @@ export default function Home() {
           duration={activeDuration}
           currentTime={currentTime}
           onSeek={handleSeek}
+          sample={attentionSample}
+          level={attentionLevel}
+          useRealCamera={hasRealCamera}
         />
       </div>
     </div>
