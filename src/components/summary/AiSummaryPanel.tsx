@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Card } from "@/components/ui/Card";
 import { SummaryFlowchart } from "@/components/summary/SummaryFlowchart";
 import { buildVisualSummary } from "@/lib/summary";
@@ -52,6 +52,20 @@ export function AiSummaryPanel({ request }: { request: MissedWindow | null }) {
     null
   );
 
+  // Bring the panel into view when a summary is asked for. The right column
+  // scrolls, and the panel sits below the alert that triggered it — without
+  // this the student clicks "Show me a summary" and sees only the heading.
+  const panelRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!request) return;
+
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    panelRef.current?.scrollIntoView({
+      behavior: reduced ? "auto" : "smooth",
+      block: "start",
+    });
+  }, [request]);
+
   useEffect(() => {
     if (!request) return;
 
@@ -87,21 +101,24 @@ export function AiSummaryPanel({ request }: { request: MissedWindow | null }) {
 
   if (!request || !data) {
     return (
-      <Card title="AI summary">
-        <div className="flex flex-col items-center gap-2 py-6 text-center">
-          <span className="text-zinc-300 dark:text-zinc-600">
-            <SparkleIcon />
-          </span>
-          <p className="text-sm text-zinc-400 dark:text-zinc-500">
-            Summaries appear here when you miss something.
-          </p>
-        </div>
-      </Card>
+      <div ref={panelRef}>
+        <Card title="AI summary">
+          <div className="flex flex-col items-center gap-2 py-6 text-center">
+            <span className="text-zinc-300 dark:text-zinc-600">
+              <SparkleIcon />
+            </span>
+            <p className="text-sm text-zinc-400 dark:text-zinc-500">
+              Summaries appear here when you miss something.
+            </p>
+          </div>
+        </Card>
+      </div>
     );
   }
 
   return (
-    <Card
+    <div ref={panelRef} className="scroll-mt-2">
+      <Card
       title={
         <span className="flex items-center justify-between gap-2">
           <span>AI Summary of the missed part</span>
@@ -123,6 +140,7 @@ export function AiSummaryPanel({ request }: { request: MissedWindow | null }) {
       <div className="mt-4 rounded-lg border border-zinc-100 bg-zinc-50/60 p-3 dark:border-zinc-800 dark:bg-zinc-950/40">
         <SummaryFlowchart data={data} />
       </div>
-    </Card>
+      </Card>
+    </div>
   );
 }

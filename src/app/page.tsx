@@ -194,9 +194,13 @@ export default function Home() {
             }
           />
 
-          <CatchUpButton currentTime={currentTime} />
-
+          {/* The summary sits directly under the alert: it is the answer to
+              the question the alert just asked, and keeping them adjacent
+              means the payoff is on screen when the student acts on it.
+              The manual catch-up goes last. */}
           <AiSummaryPanel request={summaryRequest} />
+
+          <CatchUpButton currentTime={currentTime} />
         </div>
       </div>
 
