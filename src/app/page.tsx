@@ -19,7 +19,7 @@ import { buildTimelineBands, getAttentionLevel, getSampleAt } from "@/lib/attent
 import { buildMissedWindow, getPendingAlert } from "@/lib/catchup";
 import { useYouTubeCaptions } from "@/lib/video/useYouTubeCaptions";
 import { findCaptionAt } from "@/lib/video/youtube-captions";
-import type { MissedWindow, TranscriptItem } from "@/types";
+import type { AttentionSample, MissedWindow, TranscriptItem } from "@/types";
 
 const LESSON_DURATION = 300;
 const NO_ITEMS: TranscriptItem[] = [];
@@ -50,6 +50,10 @@ export default function Home() {
   const [dismissedAlertIds, setDismissedAlertIds] = useState<string[]>([]);
   const [videoId, setVideoId] = useState<string | null>(null);
   const [videoDuration, setVideoDuration] = useState<number | null>(null);
+  // Real webcam detections recorded by second, keyed on the same integer
+  // seconds as the simulated `attentionSamples` — overrides the simulated
+  // value at that second once a real reading exists.
+  const [recordedSamples, setRecordedSamples] = useState<Record<number, AttentionSample>>({});
 
   const youtubeCaptions = useYouTubeCaptions(videoId);
   const isYouTube = videoId !== null;
@@ -138,6 +142,23 @@ export default function Home() {
         ? youtubeCaptions.message
         : null;
 
+  const handleLiveAttentionSample = (sample: AttentionSample) => {
+    setRecordedSamples((prev) => ({ ...prev, [Math.round(sample.t)]: sample }));
+  };
+  // The wave shows real detected data wherever it's been recorded, falling
+  // back to the simulated curve everywhere else — the coloured bands stay
+  // tied to the scripted attentionEvents narrative regardless, since the
+  // missed-window/catch-up alert logic depends on that staying consistent.
+  // Recordings past the simulated curve's end (a long YouTube video) are
+  // kept rather than dropped.
+  const timelineSamples = useMemo(() => {
+    const bySecond = new Map(attentionSamples.map((sample) => [sample.t, sample]));
+    for (const [second, sample] of Object.entries(recordedSamples)) {
+      bySecond.set(Number(second), sample);
+    }
+    return [...bySecond.values()].sort((a, b) => a.t - b.t);
+  }, [recordedSamples]);
+
   // Missed-line highlighting comes from PC2's buildMissedWindow, so the
   // transcript marks exactly the lines their alert offers to explain.
   const missedIds = useMemo(
@@ -176,6 +197,8 @@ export default function Home() {
     setIsPlaying(false);
     setSummaryRequest(null);
     setDismissedAlertIds([]);
+    // Webcam readings belong to the lesson they were recorded against.
+    setRecordedSamples({});
   };
 
   return (
@@ -239,6 +262,7 @@ export default function Home() {
             currentTime={currentTime}
             sample={attentionSample}
             level={attentionLevel}
+            onLiveSample={handleLiveAttentionSample}
           />
 
           <MissedAlert
@@ -267,7 +291,7 @@ export default function Home() {
       <div className="shrink-0 px-3 pb-3">
         <AttentionTimeline
           bands={timelineBands}
-          samples={attentionSamples}
+          samples={timelineSamples}
           duration={lessonDuration}
           currentTime={currentTime}
           onSeek={handleSeek}

@@ -227,7 +227,7 @@ export function VideoPanel({
           <button
             type="button"
             onClick={handleRemoveVideo}
-            className="shrink-0 rounded-full border border-zinc-300 px-2 py-0.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+            className="shrink-0 rounded-full border border-zinc-300 px-2 py-0.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
           >
             Use mock lesson
           </button>
@@ -235,7 +235,7 @@ export function VideoPanel({
           <button
             type="button"
             onClick={() => setIsFormOpen((open) => !open)}
-            className="shrink-0 rounded-full border border-zinc-300 px-2 py-0.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
+            className="shrink-0 rounded-full border border-zinc-300 px-2 py-0.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
           >
             Use a YouTube video
           </button>
@@ -251,18 +251,22 @@ export function VideoPanel({
             onKeyDown={(e) => e.key === "Enter" && handleLoadVideo()}
             placeholder="Paste a YouTube video URL"
             aria-label="YouTube video URL"
-            className="flex-1 rounded-lg border border-zinc-300 px-2.5 py-1.5 text-sm dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+            className="flex-1 rounded-lg border border-zinc-300 px-2.5 py-1.5 text-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
           />
           <button
             type="button"
             onClick={handleLoadVideo}
-            className="shrink-0 rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-500"
+            className="shrink-0 rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
           >
             Load
           </button>
         </div>
       )}
-      {urlError && <p className="text-xs text-rose-600 dark:text-rose-400">{urlError}</p>}
+      {urlError && (
+        <p role="alert" className="text-xs text-rose-600 dark:text-rose-400">
+          {urlError}
+        </p>
+      )}
 
       <div className="relative aspect-video max-h-[42vh] w-full overflow-hidden rounded-lg bg-gradient-to-br from-slate-800 to-slate-900">
         {videoId ? (
@@ -355,7 +359,7 @@ export function VideoPanel({
           value={currentTime}
           aria-label="Seek lesson"
           onChange={(e) => onSeek(Number(e.target.value))}
-          className="flex-1 accent-indigo-600"
+          className="flex-1 accent-indigo-600 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
         />
       </div>
     </div>
