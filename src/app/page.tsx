@@ -46,6 +46,7 @@ import {
 const LESSON_DURATION = 300;
 /** Stable empty array, so memoised consumers do not see a new reference. */
 const NO_EVENTS: AttentionEvent[] = [];
+const NO_ITEMS: TranscriptItem[] = [];
 const LESSON_SUBJECT = "Biology";
 const LESSON_TITLE = "Photosynthesis and the Calvin Cycle";
 
@@ -235,12 +236,12 @@ export default function Home() {
   // when actively transcribing, otherwise YouTube video captions (if loaded),
   // then the demo script.
   const isLiveLesson = liveItems !== null;
-  const isYouTubeLesson = isYouTube && !isLiveLesson && youtubeReady !== null;
-  const isDemoLesson = !isLiveLesson && !isYouTubeLesson;
+  const isYouTubeLesson = isYouTube && !isLiveLesson;
+  const isDemoLesson = !isLiveLesson && !isYouTube;
   const activeTranscript =
     liveItems ??
     (isYouTube
-      ? (youtubeReady?.items && youtubeReady.items.length > 0 ? youtubeReady.items : transcript)
+      ? (youtubeReady?.items ?? NO_ITEMS)
       : transcript);
   const activeDuration = isLiveLesson
     ? Math.max(
@@ -248,7 +249,7 @@ export default function Home() {
         Math.ceil((activeTranscript.at(-1)?.end ?? 0) + LIVE_DURATION_HEADROOM)
       )
     : isYouTube
-      ? Math.ceil(videoDuration ?? youtubeMeta?.duration ?? 0) || LESSON_DURATION
+      ? Math.ceil(videoDuration ?? youtubeMeta?.duration ?? 0) || (youtubeReady?.duration ?? LESSON_DURATION)
       : LESSON_DURATION;
   useEffect(() => {
     activeDurationRef.current = activeDuration;
@@ -258,8 +259,8 @@ export default function Home() {
   const youtubeCaptionLines = youtubeReady?.captions;
   const activeCaptions = useMemo(
     () =>
-      isYouTubeLesson && youtubeCaptionLines
-        ? youtubeCaptionLines
+      isYouTubeLesson
+        ? (youtubeCaptionLines ?? [])
         : buildCaptions(activeTranscript),
     [isYouTubeLesson, youtubeCaptionLines, activeTranscript]
   );
@@ -303,12 +304,20 @@ export default function Home() {
   // Covers the whole active lesson, so readings past the demo's 5 minutes
   // (a long YouTube video) are shown rather than dropped.
   const timelineSamples = useMemo(() => {
-    if (!hasRealCamera) return attentionSamples;
+    if (!hasRealCamera) {
+      if (isYouTubeLesson) {
+        return Array.from(
+          { length: Math.floor(activeDuration) + 1 },
+          (_, t) => ({ t, gaze: 0.5, confusion: 0, engagement: 0.5 })
+        );
+      }
+      return attentionSamples;
+    }
     return Array.from(
       { length: Math.floor(activeDuration) + 1 },
       (_, t) => recordedSamples[t] ?? { t, gaze: 0.5, confusion: 0, engagement: 0.5 }
     );
-  }, [hasRealCamera, recordedSamples, activeDuration]);
+  }, [hasRealCamera, isYouTubeLesson, recordedSamples, activeDuration]);
   // Real detections, expressed as the same AttentionEvent shape the
   // scripted demo uses, so everything downstream works unchanged.
   const liveAttentionEvents = useMemo(
@@ -334,7 +343,7 @@ export default function Home() {
           : NO_EVENTS,
     [hasRealCamera, liveAttentionEvents, isDemoLesson]
   );
-  const alertTranscript = hasRealCamera ? activeTranscript : transcript;
+  const alertTranscript = isDemoLesson ? transcript : activeTranscript;
 
   // Missed-line highlighting comes from PC2's buildMissedWindow, so the
   // transcript marks exactly the lines their alert offers to explain.

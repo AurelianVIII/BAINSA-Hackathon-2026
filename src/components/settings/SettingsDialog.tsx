@@ -1,6 +1,95 @@
 "use client";
 
 import { useEffect, useRef } from "react";
+import {
+  MODEL_DOWNLOAD_MB,
+  preload,
+} from "@/lib/ai/local-model";
+import { useLocalModel, useWebGpuAvailable } from "@/lib/ai/useLocalModel";
+
+function OnDeviceAiSection() {
+  const supported = useWebGpuAvailable();
+  const model = useLocalModel();
+
+  const percent =
+    model.progress === null ? null : Math.round(model.progress * 100);
+
+  return (
+    <div className="rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">
+      <span className="text-sm font-medium text-zinc-900 dark:text-zinc-100">
+        On-device AI summaries
+      </span>
+      <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
+        Runs SmolLM2-360M in this browser on WebGPU to pick out the key
+        point of a missed passage. It only ever highlights the teacher&apos;s
+        own sentences — it never writes new text, so it cannot get a fact
+        wrong. Nothing leaves your device.
+      </p>
+
+      {!supported && (
+        <p className="mt-2 text-xs text-amber-600 dark:text-amber-500">
+          This browser has no WebGPU, so the model cannot run here.
+          Summaries stay built from the transcript itself. Chrome or Edge
+          on a desktop supports it.
+        </p>
+      )}
+
+      {supported && model.status === "idle" && (
+        <button
+          type="button"
+          onClick={preload}
+          className="mt-3 rounded-lg border border-zinc-300 px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-900 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800 dark:focus-visible:outline-zinc-100"
+        >
+          Download model ({MODEL_DOWNLOAD_MB} MB, once)
+        </button>
+      )}
+
+      {supported && model.status === "loading" && (
+        <div className="mt-3">
+          <div
+            role="progressbar"
+            aria-label="Downloading on-device model"
+            aria-valuenow={percent ?? undefined}
+            aria-valuemin={0}
+            aria-valuemax={100}
+            className="h-1.5 w-full overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-800"
+          >
+            <div
+              className="h-full rounded-full bg-zinc-900 transition-[width] dark:bg-zinc-100"
+              style={{ width: `${percent ?? 4}%` }}
+            />
+          </div>
+          <p className="mt-1.5 text-xs tabular-nums text-zinc-500 dark:text-zinc-400">
+            {percent === null
+              ? "Starting download…"
+              : `Downloading — ${percent}%`}
+          </p>
+        </div>
+      )}
+
+      {model.status === "ready" && (
+        <p className="mt-3 text-xs font-medium text-emerald-600 dark:text-emerald-500">
+          Ready — summaries are now rewritten on this device.
+        </p>
+      )}
+
+      {model.status === "error" && (
+        <div className="mt-3">
+          <p role="alert" className="text-xs text-rose-500">
+            {model.error}
+          </p>
+          <button
+            type="button"
+            onClick={preload}
+            className="mt-2 rounded-lg border border-zinc-300 px-3 py-1.5 text-xs font-medium text-zinc-700 hover:bg-zinc-100 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+          >
+            Try again
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export function SettingsDialog({
   isOpen,
@@ -78,7 +167,7 @@ export function SettingsDialog({
             id="settings-title"
             className="text-base font-semibold text-zinc-900 dark:text-zinc-50"
           >
-            Camera &amp; Attention Settings
+            Settings
           </h2>
           <button
             type="button"
@@ -159,6 +248,8 @@ export function SettingsDialog({
               </p>
             )}
           </div>
+
+          <OnDeviceAiSection />
         </div>
 
         <div className="mt-5 flex justify-end">
