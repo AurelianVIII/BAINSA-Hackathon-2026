@@ -42,6 +42,7 @@ export function VideoPanel({
   isPlaying,
   speed,
   caption,
+  captionNotice,
   onPlayPause,
   onSpeedChange,
   onSeek,
@@ -54,6 +55,8 @@ export function VideoPanel({
   isPlaying: boolean;
   speed: 1 | 2;
   caption: CaptionChunk | null;
+  /** Shown instead of a caption when we have no transcript for this video. */
+  captionNotice?: string | null;
   onPlayPause: () => void;
   onSpeedChange: (speed: 1 | 2) => void;
   onSeek: (time: number) => void;
@@ -285,9 +288,15 @@ export function VideoPanel({
             an accessibility product, the captions are the hero element
             regardless of what is playing underneath. */}
         <div className="absolute inset-x-0 bottom-0 flex min-h-[26%] items-center justify-center bg-black/75 px-6 py-4 backdrop-blur-sm">
-          <p className="line-clamp-2 text-center text-2xl font-semibold leading-snug text-white xl:text-3xl">
-            {caption?.text ?? ""}
-          </p>
+          {captionNotice ? (
+            <p className="line-clamp-2 text-center text-base font-medium leading-snug text-white/70">
+              {captionNotice}
+            </p>
+          ) : (
+            <p className="line-clamp-2 text-center text-2xl font-semibold leading-snug text-white xl:text-3xl">
+              {caption?.text ?? ""}
+            </p>
+          )}
         </div>
       </div>
 

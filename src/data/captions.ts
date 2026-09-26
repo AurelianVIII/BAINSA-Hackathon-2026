@@ -87,11 +87,21 @@ function toCaptionChunks(item: TranscriptItem): CaptionChunk[] {
   });
 }
 
-export const captions: CaptionChunk[] = transcript.flatMap(toCaptionChunks);
+/**
+ * Derive caption chunks for any transcript — the built-in demo lesson, or
+ * one produced live by speech recognition.
+ */
+export function buildCaptions(items: TranscriptItem[]): CaptionChunk[] {
+  return items.flatMap(toCaptionChunks);
+}
+
+/** Captions for the built-in demo lesson. */
+export const captions: CaptionChunk[] = buildCaptions(transcript);
 
 /** The caption visible at `time`, or null in a gap between chunks. */
-export function getCaptionAt(time: number): CaptionChunk | null {
-  return (
-    captions.find((chunk) => time >= chunk.start && time < chunk.end) ?? null
-  );
+export function getCaptionAt(
+  chunks: CaptionChunk[],
+  time: number
+): CaptionChunk | null {
+  return chunks.find((chunk) => time >= chunk.start && time < chunk.end) ?? null;
 }
