@@ -96,6 +96,7 @@ export function AttentionTracker({
 }) {
   const [useRealCamera, setUseRealCamera] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
+  const [detectionError, setDetectionError] = useState<string | null>(null);
   const [liveSample, setLiveSample] = useState<AttentionSample | null>(null);
   const videoRef = useRef<HTMLVideoElement>(null);
   const currentTimeRef = useRef(currentTime);
@@ -117,9 +118,15 @@ export function AttentionTracker({
       .then((landmarker) => {
         if (!cancelled) landmarkerRef.current = landmarker;
       })
-      .catch(() => {
-        // Detection failing to load isn't fatal — the raw feed still shows,
-        // bars just keep falling back to the simulated sample below.
+      .catch((error) => {
+        // Not fatal — the raw feed still shows, bars fall back to the
+        // simulated sample — but say so, instead of just looking stuck.
+        if (!cancelled) {
+          console.error("Face Landmarker failed to load", error);
+          setDetectionError(
+            "Face-detection model failed to load — showing camera without live analysis."
+          );
+        }
       });
 
     navigator.mediaDevices
@@ -137,6 +144,11 @@ export function AttentionTracker({
 
         const loop = () => {
           if (cancelled) return;
+          // Always reschedule first — a throw below must not kill the loop
+          // silently (it did, before this fix: no rAF meant "stuck forever"
+          // with zero indication why).
+          rafId = requestAnimationFrame(loop);
+
           const landmarker = landmarkerRef.current;
           const now = performance.now();
           if (
@@ -145,10 +157,15 @@ export function AttentionTracker({
             now - lastInference >= INFERENCE_INTERVAL_MS
           ) {
             lastInference = now;
-            const result = landmarker.detectForVideo(video, now);
-            setLiveSample(sampleFromFaceLandmarkerResult(result, currentTimeRef.current));
+            try {
+              const result = landmarker.detectForVideo(video, now);
+              setLiveSample(sampleFromFaceLandmarkerResult(result, currentTimeRef.current));
+              setDetectionError(null);
+            } catch (error) {
+              console.error("Face Landmarker detectForVideo failed", error);
+              setDetectionError("Live face analysis hit an error — showing camera without it.");
+            }
           }
-          rafId = requestAnimationFrame(loop);
         };
         rafId = requestAnimationFrame(loop);
       })
@@ -162,6 +179,7 @@ export function AttentionTracker({
       cancelAnimationFrame(rafId);
       stream?.getTracks().forEach((track) => track.stop());
       setLiveSample(null);
+      setDetectionError(null);
     };
   }, [useRealCamera]);
 
@@ -220,6 +238,11 @@ export function AttentionTracker({
       {cameraError && (
         <p role="alert" className="mt-2 text-xs text-rose-500">
           {cameraError}
+        </p>
+      )}
+      {detectionError && (
+        <p role="alert" className="mt-2 text-xs text-amber-500">
+          {detectionError}
         </p>
       )}
       <div className="mt-4 flex flex-col gap-3">
