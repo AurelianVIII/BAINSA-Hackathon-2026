@@ -30,6 +30,21 @@ export interface AttentionEvent {
   confidence: number;
 }
 
+/** One sampled frame of the simulated webcam attention signal. */
+export interface AttentionSample {
+  /** Seconds from lesson start. */
+  t: number;
+  /** 0-1, "gaze to screen". */
+  gaze: number;
+  /** 0-1, "brow" confusion signal — high is bad. */
+  confusion: number;
+  /** 0-1. */
+  engagement: number;
+}
+
+/** Colour band for the attention timeline. */
+export type TimelineBand = "high" | "away" | "confused" | "key" | "recovered";
+
 export interface CatchUpResult {
   title: string;
   bullets: string[];
