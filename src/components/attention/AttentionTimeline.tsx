@@ -93,7 +93,14 @@ export function AttentionTimeline({
     <Card title="Attention & understanding timeline">
       <div
         ref={containerRef}
-        className="relative cursor-pointer select-none touch-none"
+        role="slider"
+        aria-label="Lesson attention timeline, seek"
+        aria-valuemin={0}
+        aria-valuemax={duration}
+        aria-valuenow={Math.round(currentTime)}
+        aria-valuetext={formatTime(currentTime)}
+        tabIndex={0}
+        className="relative cursor-pointer select-none touch-none rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
         onPointerDown={(e) => {
           setIsDragging(true);
           const time = timeFromClientX(e.clientX);
@@ -109,6 +116,21 @@ export function AttentionTimeline({
         onPointerLeave={() => {
           setIsDragging(false);
           setHoverTime(null);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === "ArrowRight") {
+            e.preventDefault();
+            onSeek(Math.min(duration, currentTime + 5));
+          } else if (e.key === "ArrowLeft") {
+            e.preventDefault();
+            onSeek(Math.max(0, currentTime - 5));
+          } else if (e.key === "Home") {
+            e.preventDefault();
+            onSeek(0);
+          } else if (e.key === "End") {
+            e.preventDefault();
+            onSeek(duration);
+          }
         }}
       >
         <svg
