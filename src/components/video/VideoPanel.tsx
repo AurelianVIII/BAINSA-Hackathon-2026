@@ -268,7 +268,7 @@ export function VideoPanel({
         </p>
       )}
 
-      <div className="relative aspect-video max-h-[42vh] w-full overflow-hidden rounded-lg bg-gradient-to-br from-slate-800 to-slate-900">
+      <div className="relative aspect-video max-h-[38vh] w-full overflow-hidden rounded-lg bg-gradient-to-br from-slate-800 to-slate-900">
         {videoId ? (
           // Real, controllable YouTube playback. `controls: 0`/`disablekb: 1`
           // keep this transport bar as the only control surface, so a real
@@ -305,7 +305,7 @@ export function VideoPanel({
               <div className="h-16 w-16 rounded-full bg-gradient-to-b from-amber-200 to-amber-300 shadow-md" />
               <div className="h-12 w-20 rounded-t-3xl bg-teal-600 shadow-md" />
             </div>
-            <span className="absolute left-[6%] top-[76%] rounded-full bg-black/60 px-2.5 py-1 text-xs font-medium text-white backdrop-blur-sm">
+            <span className="absolute bottom-[calc(26%+0.5rem)] left-[6%] rounded-full bg-black/60 px-2.5 py-1 text-xs font-medium text-white backdrop-blur-sm">
               Prof. Emma Rossi
             </span>
           </>

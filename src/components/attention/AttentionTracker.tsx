@@ -231,7 +231,7 @@ export function AttentionTracker({
       {/* max-h caps the feed so the panel cannot eat the right column.
           At 4/3 in a ~750px column this renders ~560px tall, which pushed
           the catch-up alert and the AI summary below the fold. */}
-      <div className="relative flex aspect-[4/3] max-h-[240px] w-full items-center justify-center overflow-hidden rounded-lg bg-zinc-900">
+      <div className="relative mx-auto flex aspect-[4/3] max-h-[240px] w-full max-w-[320px] items-center justify-center overflow-hidden rounded-lg bg-zinc-900">
         {useRealCamera ? (
           <video
             ref={videoRef}

@@ -91,7 +91,7 @@ export function TranscriptPanel({
   };
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+    <div className="flex min-h-[15rem] flex-1 flex-col rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
       <div
         role="tablist"
         aria-label="Lesson record"
