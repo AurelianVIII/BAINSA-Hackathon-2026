@@ -89,10 +89,14 @@ export function AttentionTracker({
   currentTime,
   sample,
   level,
+  onLiveSample,
 }: {
   currentTime: number;
   sample: AttentionSample;
   level: "high" | "medium" | "low";
+  /** Called with each real detected sample, so the page can record it onto
+   * the shared timeline instead of it only ever affecting this card. */
+  onLiveSample?: (sample: AttentionSample) => void;
 }) {
   const [useRealCamera, setUseRealCamera] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
@@ -101,10 +105,15 @@ export function AttentionTracker({
   const videoRef = useRef<HTMLVideoElement>(null);
   const currentTimeRef = useRef(currentTime);
   const landmarkerRef = useRef<FaceLandmarker | null>(null);
+  const onLiveSampleRef = useRef(onLiveSample);
 
   useEffect(() => {
     currentTimeRef.current = currentTime;
   }, [currentTime]);
+
+  useEffect(() => {
+    onLiveSampleRef.current = onLiveSample;
+  }, [onLiveSample]);
 
   useEffect(() => {
     if (!useRealCamera) return;
@@ -159,7 +168,9 @@ export function AttentionTracker({
             lastInference = now;
             try {
               const result = landmarker.detectForVideo(video, now);
-              setLiveSample(sampleFromFaceLandmarkerResult(result, currentTimeRef.current));
+              const newSample = sampleFromFaceLandmarkerResult(result, currentTimeRef.current);
+              setLiveSample(newSample);
+              if (newSample) onLiveSampleRef.current?.(newSample);
               setDetectionError(null);
             } catch (error) {
               console.error("Face Landmarker detectForVideo failed", error);

@@ -17,7 +17,7 @@ import { attentionSamples } from "@/data/attention-samples";
 import { getCaptionAt } from "@/data/captions";
 import { buildTimelineBands, getAttentionLevel, getSampleAt } from "@/lib/attention";
 import { buildMissedWindow, getPendingAlert } from "@/lib/catchup";
-import type { MissedWindow } from "@/types";
+import type { AttentionSample, MissedWindow } from "@/types";
 
 const LESSON_DURATION = 300;
 const LESSON_SUBJECT = "Biology";
@@ -43,6 +43,14 @@ export default function Home() {
   const [speed, setSpeed] = useState<1 | 2>(1);
   const [summaryRequest, setSummaryRequest] = useState<MissedWindow | null>(null);
   const [dismissedAlertIds, setDismissedAlertIds] = useState<string[]>([]);
+  // A real video reports its own true position (see VideoPanel's polling) —
+  // running the artificial clock at the same time would double-advance
+  // currentTime, so the clock below defers to it whenever it's active.
+  const [hasRealVideo, setHasRealVideo] = useState(false);
+  // Real webcam detections recorded by second, keyed on the same integer
+  // seconds as the simulated `attentionSamples` — overrides the simulated
+  // value at that second once a real reading exists.
+  const [recordedSamples, setRecordedSamples] = useState<Record<number, AttentionSample>>({});
 
   // Read inside the interval callback so the clock does not have to restart
   // on every tick just to know where it is.
@@ -86,9 +94,11 @@ export default function Home() {
   }, []);
 
   // The playback clock. Everything on this screen is time-driven, so this
-  // interval is what makes the demo move at all.
+  // interval is what makes the demo move at all — unless a real video is
+  // loaded, in which case its own polled position drives currentTime
+  // instead (see hasRealVideo above).
   useEffect(() => {
-    if (!isPlaying) return;
+    if (!isPlaying || hasRealVideo) return;
     const interval = setInterval(() => {
       if (currentTimeRef.current >= LESSON_DURATION) {
         setIsPlaying(false);
@@ -97,11 +107,22 @@ export default function Home() {
       setCurrentTime((time) => Math.min(time + 1, LESSON_DURATION));
     }, 1000 / speed);
     return () => clearInterval(interval);
-  }, [isPlaying, speed]);
+  }, [isPlaying, speed, hasRealVideo]);
 
   const attentionSample = getSampleAt(attentionSamples, currentTime);
   const attentionLevel = getAttentionLevel(attentionSample);
   const caption = getCaptionAt(currentTime);
+  const handleLiveAttentionSample = (sample: AttentionSample) => {
+    setRecordedSamples((prev) => ({ ...prev, [Math.round(sample.t)]: sample }));
+  };
+  // The wave shows real detected data wherever it's been recorded, falling
+  // back to the simulated curve everywhere else — the coloured bands stay
+  // tied to the scripted attentionEvents narrative regardless, since the
+  // missed-window/catch-up alert logic depends on that staying consistent.
+  const timelineSamples = useMemo(
+    () => attentionSamples.map((sample) => recordedSamples[sample.t] ?? sample),
+    [recordedSamples]
+  );
   // Missed-line highlighting comes from PC2's buildMissedWindow, so the
   // transcript marks exactly the lines their alert offers to explain.
   const missedIds = useMemo(
@@ -151,6 +172,7 @@ export default function Home() {
             onPlayPause={() => setIsPlaying((playing) => !playing)}
             onSpeedChange={setSpeed}
             onSeek={handleSeek}
+            onRealVideoChange={setHasRealVideo}
           />
           <TranscriptPanel
             items={transcript}
@@ -182,6 +204,7 @@ export default function Home() {
             currentTime={currentTime}
             sample={attentionSample}
             level={attentionLevel}
+            onLiveSample={handleLiveAttentionSample}
           />
 
           <MissedAlert
@@ -207,7 +230,7 @@ export default function Home() {
       <div className="shrink-0 px-3 pb-3">
         <AttentionTimeline
           bands={timelineBands}
-          samples={attentionSamples}
+          samples={timelineSamples}
           duration={LESSON_DURATION}
           currentTime={currentTime}
           onSeek={handleSeek}

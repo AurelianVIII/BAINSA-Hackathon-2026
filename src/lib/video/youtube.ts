@@ -14,6 +14,7 @@ declare global {
       pauseVideo(): void;
       seekTo(seconds: number, allowSeekAhead: boolean): void;
       setPlaybackRate(rate: number): void;
+      getCurrentTime(): number;
       mute(): void;
       unMute(): void;
       destroy(): void;

@@ -22,6 +22,11 @@ const WHITEBOARD_POINTS = [
   "CO₂ + ATP/NADPH → G3P → glucose",
 ];
 
+/** How often to read the real player's actual position back, in ms —
+ * frequent enough that the timeline/captions/attention data track real
+ * playback closely, not so frequent it spams state updates. */
+const TIME_SYNC_INTERVAL_MS = 250;
+
 /**
  * The lesson stage. Defaults to a CSS composition (no real video file needed
  * for the demo), with an option to swap in a real, controllable YouTube
@@ -40,6 +45,7 @@ export function VideoPanel({
   onPlayPause,
   onSpeedChange,
   onSeek,
+  onRealVideoChange,
 }: {
   subject: string;
   title: string;
@@ -51,6 +57,10 @@ export function VideoPanel({
   onPlayPause: () => void;
   onSpeedChange: (speed: 1 | 2) => void;
   onSeek: (time: number) => void;
+  /** Lets the page disable its own artificial playback clock while a real
+   * video is providing (via onSeek polling below) its own true position —
+   * running both at once would double-advance currentTime. */
+  onRealVideoChange?: (active: boolean) => void;
 }) {
   const [urlDraft, setUrlDraft] = useState("");
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -61,12 +71,23 @@ export function VideoPanel({
   const playerRef = useRef<YT.Player | null>(null);
   const isPlayerReadyRef = useRef(false);
   const lastKnownTimeRef = useRef(currentTime);
+  const isPlayingRef = useRef(isPlaying);
+  const pollIntervalRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    isPlayingRef.current = isPlaying;
+  }, [isPlaying]);
 
   // Create/replace the real player whenever a new video is loaded. There is
   // no real video file otherwise — see the CSS composition below — so this
   // only runs once someone opts in to a YouTube URL.
   useEffect(() => {
-    if (!videoId) return;
+    if (!videoId) {
+      onRealVideoChange?.(false);
+      return;
+    }
+    onRealVideoChange?.(true);
+
     let cancelled = false;
 
     isPlayerReadyRef.current = false;
@@ -90,6 +111,15 @@ export function VideoPanel({
             event.target.setPlaybackRate(speed);
             event.target.seekTo(currentTime, true);
             if (isPlaying) event.target.playVideo();
+
+            // The real player's own clock is the source of truth from here
+            // on — decoding/buffering means it will never track a plain
+            // setInterval exactly, which is what made the timeline/captions
+            // visibly drift out of sync with the actual video.
+            pollIntervalRef.current = window.setInterval(() => {
+              if (!isPlayingRef.current || !playerRef.current) return;
+              onSeek(playerRef.current.getCurrentTime());
+            }, TIME_SYNC_INTERVAL_MS);
           },
         },
       });
@@ -97,6 +127,10 @@ export function VideoPanel({
 
     return () => {
       cancelled = true;
+      if (pollIntervalRef.current !== null) {
+        clearInterval(pollIntervalRef.current);
+        pollIntervalRef.current = null;
+      }
       playerRef.current?.destroy();
       playerRef.current = null;
       isPlayerReadyRef.current = false;
