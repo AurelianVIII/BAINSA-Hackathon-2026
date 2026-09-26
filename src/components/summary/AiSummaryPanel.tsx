@@ -8,7 +8,7 @@ import type { MissedWindow, VisualSummaryData } from "@/lib/summary/types";
 import type { TranscriptItem } from "@/types";
 import { highlight } from "@/lib/ai/local-model";
 import { useLocalModel } from "@/lib/ai/useLocalModel";
-import { synthesizePassage } from "@/lib/ai/smart-summarizer";
+import { extractKeyFocusPoint, synthesizePassage } from "@/lib/ai/smart-summarizer";
 
 /** How long to wait for the AI summary before staying with the local one. */
 const AI_TIMEOUT_MS = 4000;
@@ -142,26 +142,32 @@ export function AiSummaryPanel({
     };
   }, [request]);
 
-  // On-device pass. The model picks which of the teacher's sentences
-  // matters most; it never writes the summary. Its reply is checked
-  // against the passage before it gets here, so this can only ever be a
-  // sentence the teacher actually said.
+  // Local & On-device pass. Provides an instant, reliable local AI Key Focus Point
+  // immediately, and enhances it via the on-device model when ready.
   useEffect(() => {
-    if (!request || model.status !== "ready") return;
+    if (!request) return;
 
     const passage = getItemsInWindow(lessonRef.current, request)
       .map((item) => item.text)
       .join(" ");
     if (!passage) return;
 
-    let cancelled = false;
-    highlight(passage).then((text) => {
-      if (!cancelled && text) setDevice({ id: request.id, text });
-    });
+    // Immediately supply high-quality local AI focus point
+    const initialFocus = extractKeyFocusPoint(passage, titleRef.current);
+    setDevice({ id: request.id, text: initialFocus });
 
-    return () => {
-      cancelled = true;
-    };
+    if (model.status === "ready") {
+      let cancelled = false;
+      highlight(passage).then((text) => {
+        if (!cancelled && text) {
+          setDevice({ id: request.id, text: synthesizePassage(text, titleRef.current) });
+        }
+      });
+
+      return () => {
+        cancelled = true;
+      };
+    }
   }, [request, model.status]);
 
   const server = ai && request && ai.id === request.id ? ai : null;

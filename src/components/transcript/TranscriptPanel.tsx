@@ -192,6 +192,7 @@ function CaptionList({
   interimText: string;
 }) {
   const activeRef = useRef<HTMLLIElement>(null);
+  const listRef = useRef<HTMLOListElement>(null);
   // Auto-scroll follows playback until the user takes over, so the panel
   // never fights someone reading back through the lesson.
   const [following, setFollowing] = useState(true);
@@ -232,9 +233,18 @@ function CaptionList({
     // yanking the list around under someone who is reading results is rude.
     if (!following || isSearching) return;
 
+    const container = listRef.current;
+    const activeEl = activeRef.current;
+    if (!container || !activeEl) return;
+
     selfScrolling.current = true;
-    activeRef.current?.scrollIntoView({
-      block: "center",
+    const containerRect = container.getBoundingClientRect();
+    const activeRect = activeEl.getBoundingClientRect();
+    const relativeTop = activeRect.top - containerRect.top + container.scrollTop;
+    const targetScrollTop = relativeTop - container.clientHeight / 2 + activeEl.clientHeight / 2;
+
+    container.scrollTo({
+      top: Math.max(0, targetScrollTop),
       behavior: prefersReducedMotion() ? "auto" : "smooth",
     });
 
@@ -279,6 +289,7 @@ function CaptionList({
           </p>
         ) : (
           <ol
+            ref={listRef}
             onScroll={() => {
               if (!selfScrolling.current) setFollowing(false);
             }}

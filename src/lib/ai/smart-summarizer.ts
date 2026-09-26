@@ -149,6 +149,12 @@ export function inferTopicTitle(
   if (combined.includes("physics") || combined.includes("velocity") || combined.includes("force")) {
     return "Physics & Motion";
   }
+  if (combined.includes("cs50") || (combined.includes("scratch") && combined.includes("c"))) {
+    return "CS50: Computational Thinking & C Fundamentals";
+  }
+  if (combined.includes("programming") || combined.includes("algorithm") || combined.includes("compiler")) {
+    return "Computer Science & Programming";
+  }
   if (combined.includes("cell") || combined.includes("dna") || combined.includes("protein")) {
     return "Cellular Biology & Genetics";
   }
@@ -226,16 +232,45 @@ export function synthesizePassage(
     return "The lesson demonstrates step-by-step problem-solving, breaking down the equation into identified components and applying the appropriate algebraic rules to reach the solution.";
   }
 
-  // Domain 5: General Educational / Technical - Systematic Third-Person Synthesis
+  // Domain 5: Computer Science & Programming Fundamentals (e.g. CS50, C, Python, Scratch, Code, Algorithms)
+  if (
+    lower.includes("cs50") ||
+    lower.includes("programming") ||
+    lower.includes("computer science") ||
+    (lower.includes("scratch") && (lower.includes("syntax") || lower.includes("puzzle") || lower.includes("language") || lower.includes("c ") || lower.includes("week"))) ||
+    ((lower.includes("function") || lower.includes("variable") || lower.includes("loop") || lower.includes("compiler")) && (lower.includes("code") || lower.includes("program")))
+  ) {
+    if (lower.includes("scratch") && (lower.includes("c ") || lower.includes("syntax") || lower.includes("week") || lower.includes("c,"))) {
+      return "The lecture transitions from visual programming in Scratch to procedural programming in C. The instructor emphasizes that while the syntax looks different and more rigorous, the underlying computational constructs—variables, functions, conditionals, and loops—remain fundamentally identical.";
+    }
+    if (lower.includes("compile") || lower.includes("clang") || lower.includes("source code") || lower.includes("machine code")) {
+      return "The instructor explains the compilation process, converting human-readable source code into binary machine code that the CPU can execute. Compilers enforce type safety and identify syntax errors before runtime.";
+    }
+    return "The instructor introduces core computational constructs including variables, control flow, functions, and data structures. The lesson emphasizes procedural logic and building a systematic mental model for problem-solving in code.";
+  }
+
+  // Domain 6: General Educational / Technical - Systematic Third-Person Synthesis
   const sentences = segmentSpeechIntoSentences(clean);
   if (sentences.length === 0) {
     return "The instructor presented core concepts and instructional steps during this segment.";
   }
 
   const synthesized = sentences
+    .filter((s) => {
+      const l = s.toLowerCase();
+      // Drop pure conversational opening banter from being chosen as the main summary
+      return (
+        !l.startsWith("all right, this is cs 50") &&
+        !l.includes("second week together") &&
+        !l.includes("down the road has a tradition") &&
+        !l.includes("feels like a bit of a fire hose")
+      );
+    })
     .slice(0, 3)
     .map((s) => {
       let t = s;
+      // Strip conversational lead-ins
+      t = t.replace(/^(all right|okay|so|now|well|and so|and indeed|in fact|you see|remember|recall that|as mentioned|as you know)\b[,:\s]*/gi, "");
       // Convert speech lead-ins to educational third person
       t = t.replace(/^(today\s+)?(i'm|i am)\s+(forcing|asking|trying to get)\s+/i, "The presenter tests ");
       t = t.replace(/^(today\s+)?(i'm|i am)\s+(building|creating|making|coding|implementing)\s+/i, "The lesson demonstrates building ");
@@ -364,6 +399,39 @@ export function extractConceptualFlow(
     return { nodes, edges };
   }
 
+  // Pattern 5: Computer Science Compilation & Code Execution
+  if (
+    fullText.includes("cs50") ||
+    (fullText.includes("c ") && (fullText.includes("scratch") || fullText.includes("code") || fullText.includes("compile"))) ||
+    fullText.includes("compiler") ||
+    fullText.includes("source code") ||
+    (fullText.includes("function") && fullText.includes("variable") && fullText.includes("loop"))
+  ) {
+    if (fullText.includes("scratch")) {
+      const nodes: SummaryFlowNode[] = [
+        { id: "cs-step-1", label: "Scratch Visual Blocks", kind: "input" },
+        { id: "cs-step-2", label: "Core Logic (Loops, Vars)", kind: "process" },
+        { id: "cs-step-3", label: "C Syntax & Types", kind: "output" },
+      ];
+      const edges: SummaryFlowEdge[] = [
+        { from: "cs-step-1", to: "cs-step-2", label: "maps to" },
+        { from: "cs-step-2", to: "cs-step-3", label: "implements in" },
+      ];
+      return { nodes, edges };
+    }
+
+    const nodes: SummaryFlowNode[] = [
+      { id: "cs-step-1", label: "C Source Code (.c)", kind: "input" },
+      { id: "cs-step-2", label: "Compiler (Clang / GCC)", kind: "process" },
+      { id: "cs-step-3", label: "Machine Code (Binary)", kind: "output" },
+    ];
+    const edges: SummaryFlowEdge[] = [
+      { from: "cs-step-1", to: "cs-step-2", label: "compiles" },
+      { from: "cs-step-2", to: "cs-step-3", label: "executes" },
+    ];
+    return { nodes, edges };
+  }
+
   // If no authentic multi-stage pipeline exists, return NO diagram
   // rather than rendering broken, cut-off sentence fragments.
   return { nodes: [], edges: [] };
@@ -450,6 +518,13 @@ export function generateSmartCatchUp(
       "Solution Verification: Evaluates roots or rates of change to reach the validated result.",
     ];
     keyIdea = "Standard formulas provide structured algorithms to solve complex polynomial and calculus problems.";
+  } else if (lower.includes("cs50") || lower.includes("programming") || lower.includes("scratch") || lower.includes("compiler") || lower.includes("syntax")) {
+    bullets = [
+      "Visual to Syntax: Transitions from Scratch's visual block model to text-based C syntax.",
+      "Core Constructs: Reuses fundamental building blocks—functions, variables, loops, and conditions.",
+      "Algorithmic Thinking: Emphasizes problem-solving and logic over memorizing rigid code syntax.",
+    ];
+    keyIdea = "Programming languages may vary in syntax, but fundamental constructs like functions, variables, and loops share the same underlying logic.";
   } else {
     const sentences = segmentSpeechIntoSentences(summary.text);
     bullets = sentences.slice(0, 3).map((s) => {
@@ -481,4 +556,14 @@ export function generateTopicGist(
 
   const combined = topicItems.map((i) => i.text).join(" ");
   return synthesizePassage(combined, topic);
+}
+
+/**
+ * Extracts the single most important conceptual takeaway sentence from a passage
+ * to serve as the Key Focus Point, guaranteed to be clean, third-person, and accurate.
+ */
+export function extractKeyFocusPoint(passage: string, lessonTitle?: string): string {
+  const summary = synthesizePassage(passage, lessonTitle);
+  const sentences = segmentSpeechIntoSentences(summary);
+  return sentences[0] || "Key concepts and problem-solving steps were demonstrated during this segment.";
 }

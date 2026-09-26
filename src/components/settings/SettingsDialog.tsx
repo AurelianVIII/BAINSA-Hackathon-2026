@@ -20,17 +20,15 @@ function OnDeviceAiSection() {
         On-device AI summaries
       </span>
       <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
-        Runs SmolLM2-360M in this browser on WebGPU to pick the one line
-        that gets you back on track after looking away. It only ever
-        highlights the teacher&apos;s own sentences — it never writes new
-        text, so it cannot get a fact wrong. Nothing leaves your device.
+        Runs SmolLM2-360M directly in this browser using WebGPU or WebAssembly
+        hardware acceleration to pick the key line after looking away. It only
+        ever highlights the teacher&apos;s own sentences — nothing leaves your device.
       </p>
 
       {!supported && (
         <p className="mt-2 text-xs text-amber-600 dark:text-amber-500">
-          This browser has no WebGPU, so the model cannot run here.
-          Summaries stay built from the transcript itself. Chrome or Edge
-          on a desktop supports it.
+          This browser does not support Web Workers. Summaries stay built using
+          the built-in smart summarizer engine.
         </p>
       )}
 

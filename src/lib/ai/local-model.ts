@@ -24,7 +24,7 @@ export interface LocalModelState {
 export const MODEL_DOWNLOAD_MB = 260;
 
 export function isWebGpuAvailable(): boolean {
-  return typeof navigator !== "undefined" && "gpu" in navigator;
+  return typeof window !== "undefined" && typeof Worker !== "undefined";
 }
 
 type Listener = (state: LocalModelState) => void;

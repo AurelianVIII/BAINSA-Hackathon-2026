@@ -76,14 +76,31 @@ function makeProgressReporter() {
   };
 }
 
-function load() {
-  generator ??= pipeline("text-generation", MODEL_ID, {
-    // q4f16 halves the download against q4 and is the format WebGPU runs
-    // fastest on; it is only ever selected when WebGPU is present.
-    dtype: "q4f16",
-    device: "webgpu",
+async function load() {
+  if (generator) return generator;
+
+  const hasWebGpu = typeof navigator !== "undefined" && "gpu" in navigator;
+  if (hasWebGpu) {
+    try {
+      generator = pipeline("text-generation", MODEL_ID, {
+        dtype: "q4f16",
+        device: "webgpu",
+        progress_callback: makeProgressReporter(),
+      });
+      await generator;
+      return generator;
+    } catch (e) {
+      console.warn("WebGPU initialization failed in worker, falling back to wasm:", e);
+      generator = null;
+    }
+  }
+
+  generator = pipeline("text-generation", MODEL_ID, {
+    dtype: "q4",
+    device: "wasm",
     progress_callback: makeProgressReporter(),
   });
+  await generator;
   return generator;
 }
 
