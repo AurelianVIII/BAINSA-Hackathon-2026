@@ -22,7 +22,12 @@ export function loadFaceLandmarker(): Promise<FaceLandmarker> {
     FaceLandmarker.createFromOptions(fileset, {
       baseOptions: { modelAssetPath: MODEL_URL, delegate: "CPU" },
       outputFaceBlendshapes: true,
-      outputFacialTransformationMatrixes: false,
+      // Gives a real 6-DOF head pose, which is a far better "is the head
+      // turned away" signal than nose-offset in image space. The model
+      // already fits this transform internally to place the canonical
+      // mesh, so asking for it returns existing work rather than adding a
+      // second solve.
+      outputFacialTransformationMatrixes: true,
       runningMode: "VIDEO",
       numFaces: 1,
     })
@@ -58,10 +63,53 @@ const RIGHT_FACE_EDGE = 454;
  *  camera (no camera in this dev environment). Expect to adjust these
  *  against how they actually feel once tested live. */
 const HEAD_YAW_SENSITIVITY = 3.5;
+/** Head-pose alignment at or below which the head counts as fully turned
+ *  away (~0.55 ≈ 57° off the camera axis). Uncalibrated, like the rest. */
+const HEAD_ALIGNMENT_FLOOR = 0.55;
 const BROW_FURROW_GAIN = 1.8;
 
 function clamp01(value: number) {
   return Math.min(1, Math.max(0, value));
+}
+
+/**
+ * How squarely the head faces the camera, from the Face Landmarker's facial
+ * transformation matrix: 1 is dead-on, 0 is turned a full 90° away.
+ *
+ * Only the (2,2) element of the rotation sub-matrix is used, divided by that
+ * axis's length to cancel the matrix's scale. That element is the dot
+ * product of the head's forward axis with the camera axis, and it is the one
+ * element immune to the row- vs column-major ambiguity in this matrix: index
+ * 10 addresses (2,2) under either layout, and (2,2) is unchanged by
+ * transposition. So this reads correctly without having to guess a
+ * convention that MediaPipe documents inconsistently.
+ *
+ * Unlike the nose-offset fallback this also captures pitch, so looking down
+ * at notes registers as looking away — not just turning left or right.
+ *
+ * Returns null if the matrix is missing or is not a plausible pose, so the
+ * caller can fall back.
+ */
+function headAlignment(result: FaceLandmarkerResult): number | null {
+  const matrix = result.facialTransformationMatrixes?.[0];
+  if (!matrix || matrix.rows !== 4 || matrix.columns !== 4) return null;
+
+  const d = matrix.data;
+  if (d.length < 16) return null;
+
+  // Axis lengths of the rotation sub-matrix — equal to the uniform scale.
+  const sx = Math.hypot(d[0], d[4], d[8]);
+  const sy = Math.hypot(d[1], d[5], d[9]);
+  const sz = Math.hypot(d[2], d[6], d[10]);
+  if (!(sz > 1e-6) || !Number.isFinite(d[10])) return null;
+
+  // A real pose is a uniform scale times a rotation. If the three axes
+  // disagree, this is not the matrix shape assumed here — fall back rather
+  // than report a confident wrong number.
+  const spread = Math.max(sx, sy, sz) - Math.min(sx, sy, sz);
+  if (spread > 0.25 * sz) return null;
+
+  return clamp01(Math.abs(d[10]) / sz);
 }
 
 /**
@@ -98,7 +146,17 @@ export function sampleFromFaceLandmarkerResult(
   const rightEdge = landmarks[RIGHT_FACE_EDGE];
   const faceWidth = Math.abs(rightEdge.x - leftEdge.x) || 1;
   const yawOffset = (nose.x - (leftEdge.x + rightEdge.x) / 2) / faceWidth;
-  const headGaze = 1 - clamp01(Math.abs(yawOffset) * HEAD_YAW_SENSITIVITY);
+
+  // Prefer the real head pose; the image-space nose offset is the fallback.
+  // That offset cannot tell a turned head from a student simply sitting off
+  // to one side of the camera, ignores head tilt, and misses pitch entirely.
+  const alignment = headAlignment(result);
+  const headGaze =
+    alignment === null
+      ? 1 - clamp01(Math.abs(yawOffset) * HEAD_YAW_SENSITIVITY)
+      : clamp01(
+          (alignment - HEAD_ALIGNMENT_FLOOR) / (1 - HEAD_ALIGNMENT_FLOOR)
+        );
 
   const blink =
     (blendshapeScore(result, "eyeBlinkLeft") + blendshapeScore(result, "eyeBlinkRight")) / 2;
