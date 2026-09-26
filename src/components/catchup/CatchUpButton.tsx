@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Card } from "@/components/ui/Card";
 import { generateCatchUp } from "@/lib/catchup";
 import { transcript } from "@/data/transcript";
-import type { CatchUpResult } from "@/types";
+import type { CatchUpResult, TranscriptItem } from "@/types";
 
 const FETCH_TIMEOUT_MS = 4000;
 
@@ -12,20 +12,26 @@ const FETCH_TIMEOUT_MS = 4000;
  * Calls /api/catchup for an AI-condensed summary, falling back to the
  * local deterministic result on any error, non-OK response, or if it
  * takes longer than FETCH_TIMEOUT_MS — the demo must never hang on a
- * network call.
+ * network call. `items` overrides the mock lesson (e.g. a YouTube video's
+ * captions); only the lines in the window are sent.
  */
-async function fetchCatchUp(start: number, end: number): Promise<CatchUpResult> {
-  const local = generateCatchUp(transcript, start, end);
+async function fetchCatchUp(
+  items: TranscriptItem[] | undefined,
+  start: number,
+  end: number
+): Promise<CatchUpResult> {
+  const local = generateCatchUp(items ?? transcript, start, end);
   if (local.bullets.length === 0) return local;
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  const windowItems = items?.filter((item) => item.end > start && item.start < end);
 
   try {
     const response = await fetch("/api/catchup", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ start, end }),
+      body: JSON.stringify(windowItems ? { start, end, items: windowItems } : { start, end }),
       signal: controller.signal,
     });
     if (!response.ok) return local;
@@ -40,16 +46,22 @@ async function fetchCatchUp(start: number, end: number): Promise<CatchUpResult> 
 /**
  * Owned by the Catch-up feature team. Minimal working demo (manual
  * "Catch me up" over the last 60s) — keep the `currentTime` prop as the
- * input contract.
+ * input contract. `items` defaults to the mock lesson transcript.
  */
-export function CatchUpButton({ currentTime }: { currentTime: number }) {
+export function CatchUpButton({
+  currentTime,
+  items,
+}: {
+  currentTime: number;
+  items?: TranscriptItem[];
+}) {
   const [result, setResult] = useState<CatchUpResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
   const handleClick = async () => {
     setIsLoading(true);
     try {
-      setResult(await fetchCatchUp(currentTime - 60, currentTime));
+      setResult(await fetchCatchUp(items, currentTime - 60, currentTime));
     } finally {
       setIsLoading(false);
     }

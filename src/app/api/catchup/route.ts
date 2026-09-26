@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { transcript } from "@/data/transcript";
 import { generateCatchUp } from "@/lib/catchup";
-import type { CatchUpResult } from "@/types";
+import type { CatchUpResult, TranscriptItem } from "@/types";
 
 /**
  * Owned by the Catch-up feature team (PC2).
@@ -45,14 +45,49 @@ Rules:
 - Three bullets maximum.
 - The key idea is one sentence: the single most important takeaway.`;
 
+const MAX_CLIENT_ITEMS = 60;
+const MAX_ITEM_TEXT_LENGTH = 2000;
+
+/**
+ * Lines sent by the client (a YouTube video's captions) in place of the
+ * mock lesson. Anything malformed or oversized is rejected, not trusted.
+ */
+function parseClientItems(value: unknown): TranscriptItem[] | null {
+  if (!Array.isArray(value) || value.length === 0 || value.length > MAX_CLIENT_ITEMS) {
+    return null;
+  }
+  const items: TranscriptItem[] = [];
+  for (const [index, raw] of value.entries()) {
+    const start = Number(raw?.start);
+    const end = Number(raw?.end);
+    const text = typeof raw?.text === "string" ? raw.text.slice(0, MAX_ITEM_TEXT_LENGTH) : "";
+    if (!Number.isFinite(start) || !Number.isFinite(end) || !text) return null;
+    items.push({
+      id: `client-${index}`,
+      start,
+      end,
+      text,
+      topic: typeof raw?.topic === "string" ? raw.topic.slice(0, 100) : "What you missed",
+    });
+  }
+  return items;
+}
+
 export async function POST(request: Request) {
   let start = 0;
   let end = 0;
+  let clientItems: TranscriptItem[] | null = null;
 
   try {
     const body = await request.json();
     start = Number(body?.start) || 0;
     end = Number(body?.end) || 0;
+    if (body?.items !== undefined) {
+      clientItems = parseClientItems(body.items);
+      if (!clientItems) {
+        return Response.json({ error: "Invalid `items`" }, { status: 400 });
+      }
+    }
   } catch {
     return Response.json({ error: "Invalid JSON body" }, { status: 400 });
   }
@@ -64,9 +99,14 @@ export async function POST(request: Request) {
     );
   }
 
+  const source = clientItems ?? transcript;
+  const lessonDescription = clientItems
+    ? "a video lesson"
+    : "a biology lesson on photosynthesis";
+
   // Deterministic result first — this is what ships if anything below
   // fails, and what the demo runs on when no API key is configured.
-  const local = generateCatchUp(transcript, start, end);
+  const local = generateCatchUp(source, start, end);
 
   if (!process.env.ANTHROPIC_API_KEY || local.bullets.length === 0) {
     return Response.json({ ...local, source: "local" });
@@ -79,7 +119,7 @@ export async function POST(request: Request) {
       maxRetries: 0,
     });
 
-    const passage = transcript
+    const passage = source
       .filter((item) => item.end > start && item.start < end)
       .map((item) => item.text)
       .join(" ");
@@ -97,7 +137,7 @@ export async function POST(request: Request) {
       messages: [
         {
           role: "user",
-          content: `The student missed this part of a biology lesson on photosynthesis:\n\n"${passage}"\n\nSummarise what they missed.`,
+          content: `The student missed this part of ${lessonDescription}:\n\n"${passage}"\n\nSummarise what they missed.`,
         },
       ],
     });

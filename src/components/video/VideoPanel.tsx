@@ -1,12 +1,19 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useEffectEvent, useRef, useState } from "react";
 import { loadYouTubeIframeApi, parseYouTubeVideoId } from "@/lib/video/youtube";
 import type { CaptionChunk } from "@/types";
 
-/** How far `currentTime` has to jump for it to count as a seek rather than
- * a normal one-second playback tick (accounting for 2x speed). */
-const SEEK_JUMP_THRESHOLD_SECONDS = 1.5;
+/** How often the real player's position is reported up to the page. */
+const POLL_INTERVAL_MS = 250;
+/** A page-side time further than this from the player's own is a seek. */
+const SEEK_TOLERANCE_SECONDS = 0.75;
+/** Right after a seek the player can still report its old position. */
+const SEEK_SETTLE_MS = 1000;
+
+const YT_ENDED = 0;
+const YT_PLAYING = 1;
+const YT_PAUSED = 2;
 
 function formatTime(seconds: number) {
   const m = Math.floor(seconds / 60);
@@ -24,10 +31,12 @@ const WHITEBOARD_POINTS = [
 
 /**
  * The lesson stage. Defaults to a CSS composition (no real video file needed
- * for the demo), with an option to swap in a real, controllable YouTube
- * video instead — see the `videoId` state below. Either way, the burned-in
- * caption bar stays on top: this is an accessibility product for deaf
- * learners, so the captions are the hero element and are sized like it.
+ * for the demo), with an option to swap in a real YouTube video. In YouTube
+ * mode the player is the clock: it reports its position, duration and
+ * play state up through the `onVideo*` callbacks, and the page's own clock
+ * stands down. Either way, the burned-in caption bar stays on top: this is
+ * an accessibility product for deaf learners, so the captions are the hero
+ * element and are sized like it.
  */
 export function VideoPanel({
   subject,
@@ -37,9 +46,15 @@ export function VideoPanel({
   isPlaying,
   speed,
   caption,
+  captionNotice,
+  videoId,
   onPlayPause,
   onSpeedChange,
   onSeek,
+  onVideoChange,
+  onVideoTimeUpdate,
+  onVideoDurationChange,
+  onVideoPlayingChange,
 }: {
   subject: string;
   title: string;
@@ -48,32 +63,71 @@ export function VideoPanel({
   isPlaying: boolean;
   speed: 1 | 2;
   caption: CaptionChunk | null;
+  /** Shown in the caption bar when there is no caption text to show. */
+  captionNotice?: string | null;
+  videoId: string | null;
   onPlayPause: () => void;
   onSpeedChange: (speed: 1 | 2) => void;
   onSeek: (time: number) => void;
+  onVideoChange: (videoId: string | null) => void;
+  onVideoTimeUpdate: (time: number) => void;
+  onVideoDurationChange: (duration: number) => void;
+  onVideoPlayingChange: (playing: boolean) => void;
 }) {
   const [urlDraft, setUrlDraft] = useState("");
   const [isFormOpen, setIsFormOpen] = useState(false);
-  const [videoId, setVideoId] = useState<string | null>(null);
   const [urlError, setUrlError] = useState<string | null>(null);
 
   const playerContainerRef = useRef<HTMLDivElement | null>(null);
+  /** Set only once the player is ready to take commands. */
   const playerRef = useRef<YT.Player | null>(null);
-  const isPlayerReadyRef = useRef(false);
-  const lastKnownTimeRef = useRef(currentTime);
+  /** Last position reported up to the page, so a `currentTime` that
+   * disagrees with it can be recognised as a seek from elsewhere. */
+  const lastReportedTimeRef = useRef(0);
+  const pendingSeekRef = useRef<{ target: number; until: number } | null>(null);
 
-  // Create/replace the real player whenever a new video is loaded. There is
-  // no real video file otherwise — see the CSS composition below — so this
-  // only runs once someone opts in to a YouTube URL.
+  const reportTime = useEffectEvent((time: number) => onVideoTimeUpdate(time));
+  const reportDuration = useEffectEvent((seconds: number) => onVideoDurationChange(seconds));
+  const applyInitialState = useEffectEvent((player: YT.Player) => {
+    player.setPlaybackRate(speed);
+    if (isPlaying) player.playVideo();
+  });
+  const handleStateChange = useEffectEvent((state: number, player: YT.Player) => {
+    if (state === YT_PLAYING) {
+      // Seeking a video that has never played starts it; if the student
+      // was only scrubbing while paused, keep it paused.
+      if (!isPlaying && pendingSeekRef.current) {
+        player.pauseVideo();
+        return;
+      }
+      onVideoPlayingChange(true);
+    } else if (state === YT_PAUSED || state === YT_ENDED) {
+      onVideoPlayingChange(false);
+    }
+  });
+  const seekPlayer = useEffectEvent((time: number) => {
+    const player = playerRef.current;
+    if (!player) return;
+    if (Math.abs(time - lastReportedTimeRef.current) <= SEEK_TOLERANCE_SECONDS) return;
+    lastReportedTimeRef.current = time;
+    pendingSeekRef.current = { target: time, until: performance.now() + SEEK_SETTLE_MS };
+    player.seekTo(time, true);
+    if (!isPlaying) player.pauseVideo();
+  });
+
+  // Create the real player whenever a new video is chosen, and poll it for
+  // its position while it exists.
   useEffect(() => {
     if (!videoId) return;
     let cancelled = false;
+    let created: YT.Player | null = null;
+    let poll: ReturnType<typeof setInterval> | undefined;
+    lastReportedTimeRef.current = 0;
+    pendingSeekRef.current = null;
 
-    isPlayerReadyRef.current = false;
     loadYouTubeIframeApi().then((YT) => {
       if (cancelled || !playerContainerRef.current) return;
-      playerRef.current?.destroy();
-      playerRef.current = new YT.Player(playerContainerRef.current, {
+      const player = new YT.Player(playerContainerRef.current, {
         videoId,
         width: "100%",
         height: "100%",
@@ -85,51 +139,62 @@ export function VideoPanel({
           playsinline: 1,
         },
         events: {
-          onReady: (event) => {
-            isPlayerReadyRef.current = true;
-            event.target.setPlaybackRate(speed);
-            event.target.seekTo(currentTime, true);
-            if (isPlaying) event.target.playVideo();
+          onReady: () => {
+            if (cancelled) return;
+            playerRef.current = player;
+            applyInitialState(player);
+
+            let lastDuration = 0;
+            poll = setInterval(() => {
+              const seconds = player.getDuration();
+              if (seconds > 0 && seconds !== lastDuration) {
+                lastDuration = seconds;
+                reportDuration(seconds);
+              }
+
+              const time = player.getCurrentTime();
+              const pending = pendingSeekRef.current;
+              if (pending) {
+                const stale = Math.abs(time - pending.target) > 1.5;
+                if (stale && performance.now() < pending.until) return;
+                pendingSeekRef.current = null;
+              }
+              if (Math.abs(time - lastReportedTimeRef.current) < 0.05) return;
+              lastReportedTimeRef.current = time;
+              reportTime(time);
+            }, POLL_INTERVAL_MS);
           },
+          onStateChange: (event) => handleStateChange(event.data, player),
         },
       });
+      created = player;
     });
 
     return () => {
       cancelled = true;
-      playerRef.current?.destroy();
+      clearInterval(poll);
+      created?.destroy();
       playerRef.current = null;
-      isPlayerReadyRef.current = false;
     };
-    // Only (re)create the player when the video itself changes — the
-    // effects below keep it in sync with playback state after that.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [videoId]);
 
   useEffect(() => {
-    if (!videoId || !isPlayerReadyRef.current || !playerRef.current) return;
-    if (isPlaying) {
-      playerRef.current.seekTo(currentTime, true);
-      playerRef.current.playVideo();
-    } else {
-      playerRef.current.pauseVideo();
-    }
-    // Only react to play/pause toggling itself, not every currentTime tick.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isPlaying, videoId]);
+    const player = playerRef.current;
+    if (!player) return;
+    if (isPlaying) player.playVideo();
+    else player.pauseVideo();
+  }, [isPlaying]);
 
   useEffect(() => {
-    if (!videoId || !isPlayerReadyRef.current || !playerRef.current) return;
-    playerRef.current.setPlaybackRate(speed);
-  }, [speed, videoId]);
+    playerRef.current?.setPlaybackRate(speed);
+  }, [speed]);
 
+  // Any change to `currentTime` that didn't come from the player itself —
+  // the slider, arrow keys, a transcript line, the timeline, "Replay" — is
+  // a seek.
   useEffect(() => {
-    const jumped =
-      Math.abs(currentTime - lastKnownTimeRef.current) > SEEK_JUMP_THRESHOLD_SECONDS;
-    lastKnownTimeRef.current = currentTime;
-    if (!videoId || !isPlayerReadyRef.current || !playerRef.current || !jumped) return;
-    playerRef.current.seekTo(currentTime, true);
-  }, [currentTime, videoId]);
+    seekPlayer(currentTime);
+  }, [currentTime]);
 
   const handleLoadVideo = () => {
     const id = parseYouTubeVideoId(urlDraft);
@@ -139,11 +204,11 @@ export function VideoPanel({
     }
     setUrlError(null);
     setIsFormOpen(false);
-    setVideoId(id);
+    onVideoChange(id);
   };
 
   const handleRemoveVideo = () => {
-    setVideoId(null);
+    onVideoChange(null);
     setUrlDraft("");
   };
 
@@ -247,9 +312,15 @@ export function VideoPanel({
             an accessibility product, the captions are the hero element
             regardless of what is playing underneath. */}
         <div className="absolute inset-x-0 bottom-0 flex min-h-[26%] items-center justify-center bg-black/75 px-6 py-4 backdrop-blur-sm">
-          <p className="line-clamp-2 text-center text-2xl font-semibold leading-snug text-white xl:text-3xl">
-            {caption?.text ?? ""}
-          </p>
+          {caption || !captionNotice ? (
+            <p className="line-clamp-2 text-center text-2xl font-semibold leading-snug text-white xl:text-3xl">
+              {caption?.text ?? ""}
+            </p>
+          ) : (
+            <p role="status" className="text-center text-base font-medium text-white/75">
+              {captionNotice}
+            </p>
+          )}
         </div>
       </div>
 

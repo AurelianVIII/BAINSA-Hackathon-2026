@@ -17,9 +17,12 @@ import { attentionSamples } from "@/data/attention-samples";
 import { getCaptionAt } from "@/data/captions";
 import { buildTimelineBands, getAttentionLevel, getSampleAt } from "@/lib/attention";
 import { buildMissedWindow, getPendingAlert } from "@/lib/catchup";
-import type { MissedWindow } from "@/types";
+import { useYouTubeCaptions } from "@/lib/video/useYouTubeCaptions";
+import { findCaptionAt } from "@/lib/video/youtube-captions";
+import type { MissedWindow, TranscriptItem } from "@/types";
 
 const LESSON_DURATION = 300;
+const NO_ITEMS: TranscriptItem[] = [];
 const LESSON_SUBJECT = "Biology";
 const LESSON_TITLE = "Photosynthesis and the Calvin Cycle";
 
@@ -34,8 +37,10 @@ const MISSED_EVENT_TYPES = ["looking-away", "low-attention"] as const;
  * source of truth for lesson playback, owned here and passed down to every
  * feature area — do not create competing playback state elsewhere.
  *
- * Page-level state is limited to the four pieces agreed in ROADMAP §2:
- * `currentTime`, `isPlaying`, `summaryRequest` and `dismissedAlertIds`.
+ * Page-level state is the four pieces agreed in ROADMAP §2 (`currentTime`,
+ * `isPlaying`, `summaryRequest`, `dismissedAlertIds`) plus the optional
+ * YouTube source. With a YouTube video loaded, the player drives
+ * `currentTime` and its real captions replace the mock transcript.
  */
 export default function Home() {
   const [currentTime, setCurrentTime] = useState(0);
@@ -43,13 +48,32 @@ export default function Home() {
   const [speed, setSpeed] = useState<1 | 2>(1);
   const [summaryRequest, setSummaryRequest] = useState<MissedWindow | null>(null);
   const [dismissedAlertIds, setDismissedAlertIds] = useState<string[]>([]);
+  const [videoId, setVideoId] = useState<string | null>(null);
+  const [videoDuration, setVideoDuration] = useState<number | null>(null);
 
-  // Read inside the interval callback so the clock does not have to restart
-  // on every tick just to know where it is.
+  const youtubeCaptions = useYouTubeCaptions(videoId);
+  const isYouTube = videoId !== null;
+  const youtubeReady = youtubeCaptions.status === "ready" ? youtubeCaptions : null;
+  const youtubeMeta =
+    youtubeCaptions.status === "ready" || youtubeCaptions.status === "unavailable"
+      ? youtubeCaptions
+      : null;
+
+  const lessonItems = isYouTube ? (youtubeReady?.items ?? NO_ITEMS) : transcript;
+  const lessonDuration = isYouTube
+    ? Math.ceil(videoDuration ?? youtubeMeta?.duration ?? 0) || LESSON_DURATION
+    : LESSON_DURATION;
+
+  // Read inside the interval/keyboard callbacks so they do not have to be
+  // re-registered on every tick just to know where playback is.
   const currentTimeRef = useRef(currentTime);
   useEffect(() => {
     currentTimeRef.current = currentTime;
   }, [currentTime]);
+  const lessonDurationRef = useRef(lessonDuration);
+  useEffect(() => {
+    lessonDurationRef.current = lessonDuration;
+  }, [lessonDuration]);
 
   // Keyboard shortcuts for driving playback hands-free. Interactive
   // elements are skipped so this never steals space from a focused button
@@ -76,7 +100,7 @@ export default function Home() {
       } else if (event.key === "ArrowRight") {
         event.preventDefault();
         setCurrentTime((time) =>
-          Math.min(LESSON_DURATION, time + SEEK_STEP_SECONDS)
+          Math.min(lessonDurationRef.current, time + SEEK_STEP_SECONDS)
         );
       }
     };
@@ -85,10 +109,12 @@ export default function Home() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  // The playback clock. Everything on this screen is time-driven, so this
-  // interval is what makes the demo move at all.
+  // The playback clock for the mock lesson. Everything on this screen is
+  // time-driven, so this interval is what makes the demo move at all. A
+  // YouTube video is its own clock (VideoPanel reports its position), so
+  // this stands down while one is loaded.
   useEffect(() => {
-    if (!isPlaying) return;
+    if (!isPlaying || isYouTube) return;
     const interval = setInterval(() => {
       if (currentTimeRef.current >= LESSON_DURATION) {
         setIsPlaying(false);
@@ -97,11 +123,21 @@ export default function Home() {
       setCurrentTime((time) => Math.min(time + 1, LESSON_DURATION));
     }, 1000 / speed);
     return () => clearInterval(interval);
-  }, [isPlaying, speed]);
+  }, [isPlaying, speed, isYouTube]);
 
   const attentionSample = getSampleAt(attentionSamples, currentTime);
   const attentionLevel = getAttentionLevel(attentionSample);
-  const caption = getCaptionAt(currentTime);
+  const caption = isYouTube
+    ? findCaptionAt(youtubeReady?.captions ?? [], currentTime)
+    : getCaptionAt(currentTime);
+  const captionNotice = !isYouTube
+    ? null
+    : youtubeCaptions.status === "loading"
+      ? "Loading captions…"
+      : youtubeCaptions.status === "unavailable"
+        ? youtubeCaptions.message
+        : null;
+
   // Missed-line highlighting comes from PC2's buildMissedWindow, so the
   // transcript marks exactly the lines their alert offers to explain.
   const missedIds = useMemo(
@@ -112,25 +148,34 @@ export default function Home() {
         )
         .flatMap(
           (event) =>
-            buildMissedWindow(attentionEvents, transcript, event).transcriptIds
+            buildMissedWindow(attentionEvents, lessonItems, event).transcriptIds
         ),
-    []
+    [lessonItems]
   );
 
   // PC2 owns the "has the student just come back?" rule.
   const activeAlert = getPendingAlert(
     attentionEvents,
-    transcript,
+    lessonItems,
     currentTime,
     dismissedAlertIds
   );
   const timelineBands = useMemo(
-    () => buildTimelineBands(attentionEvents, transcript, LESSON_DURATION),
-    []
+    () => buildTimelineBands(attentionEvents, lessonItems, lessonDuration),
+    [lessonItems, lessonDuration]
   );
 
   const handleSeek = (time: number) => {
-    setCurrentTime(Math.max(0, Math.min(time, LESSON_DURATION)));
+    setCurrentTime(Math.max(0, Math.min(time, lessonDuration)));
+  };
+
+  const handleVideoChange = (id: string | null) => {
+    setVideoId(id);
+    setVideoDuration(null);
+    setCurrentTime(0);
+    setIsPlaying(false);
+    setSummaryRequest(null);
+    setDismissedAlertIds([]);
   };
 
   return (
@@ -141,25 +186,37 @@ export default function Home() {
         {/* Left column: the lesson itself. */}
         <div className="flex min-h-0 flex-col gap-3">
           <VideoPanel
-            subject={LESSON_SUBJECT}
-            title={LESSON_TITLE}
+            subject={
+              !isYouTube
+                ? LESSON_SUBJECT
+                : youtubeReady?.autoGenerated
+                  ? "YouTube · auto-captions"
+                  : "YouTube"
+            }
+            title={isYouTube ? (youtubeMeta?.title ?? "YouTube video") : LESSON_TITLE}
             currentTime={currentTime}
-            duration={LESSON_DURATION}
+            duration={lessonDuration}
             isPlaying={isPlaying}
             speed={speed}
             caption={caption}
+            captionNotice={captionNotice}
+            videoId={videoId}
             onPlayPause={() => setIsPlaying((playing) => !playing)}
             onSpeedChange={setSpeed}
             onSeek={handleSeek}
+            onVideoChange={handleVideoChange}
+            onVideoTimeUpdate={setCurrentTime}
+            onVideoDurationChange={setVideoDuration}
+            onVideoPlayingChange={setIsPlaying}
           />
           <TranscriptPanel
-            items={transcript}
+            items={lessonItems}
             currentTime={currentTime}
             onSeek={handleSeek}
             missedIds={missedIds}
             keyMomentsSlot={
               <KeyMoments
-                items={transcript}
+                items={lessonItems}
                 currentTime={currentTime}
                 onSeek={handleSeek}
                 missedIds={missedIds}
@@ -168,7 +225,7 @@ export default function Home() {
             }
             visualSummarySlot={
               <VisualSummaryTab
-                items={transcript}
+                items={lessonItems}
                 currentTime={currentTime}
                 onSeek={handleSeek}
               />
@@ -200,7 +257,10 @@ export default function Home() {
               The manual catch-up goes last. */}
           <AiSummaryPanel request={summaryRequest} />
 
-          <CatchUpButton currentTime={currentTime} />
+          <CatchUpButton
+            currentTime={currentTime}
+            items={isYouTube ? lessonItems : undefined}
+          />
         </div>
       </div>
 
@@ -208,7 +268,7 @@ export default function Home() {
         <AttentionTimeline
           bands={timelineBands}
           samples={attentionSamples}
-          duration={LESSON_DURATION}
+          duration={lessonDuration}
           currentTime={currentTime}
           onSeek={handleSeek}
         />

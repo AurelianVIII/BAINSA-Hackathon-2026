@@ -14,6 +14,8 @@ declare global {
       pauseVideo(): void;
       seekTo(seconds: number, allowSeekAhead: boolean): void;
       setPlaybackRate(rate: number): void;
+      getCurrentTime(): number;
+      getDuration(): number;
       mute(): void;
       unMute(): void;
       destroy(): void;
@@ -26,6 +28,7 @@ declare global {
       playerVars?: Record<string, number | string>;
       events?: {
         onReady?: (event: { target: Player }) => void;
+        onStateChange?: (event: { target: Player; data: number }) => void;
         onError?: (event: { target: Player; data: number }) => void;
       };
     }
