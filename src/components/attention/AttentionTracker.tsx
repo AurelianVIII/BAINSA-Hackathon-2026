@@ -90,6 +90,7 @@ export function AttentionTracker({
   sample,
   level,
   onLiveSample,
+  onRealCameraChange,
 }: {
   currentTime: number;
   sample: AttentionSample;
@@ -97,6 +98,10 @@ export function AttentionTracker({
   /** Called with each real detected sample, so the page can record it onto
    * the shared timeline instead of it only ever affecting this card. */
   onLiveSample?: (sample: AttentionSample) => void;
+  /** Called whenever real capture is toggled, so the page can hide the
+   * pre-built demo timeline while genuine attentiveness is being
+   * registered instead of mixing the two together. */
+  onRealCameraChange?: (active: boolean) => void;
 }) {
   const [useRealCamera, setUseRealCamera] = useState(false);
   const [cameraError, setCameraError] = useState<string | null>(null);
@@ -114,6 +119,13 @@ export function AttentionTracker({
   useEffect(() => {
     onLiveSampleRef.current = onLiveSample;
   }, [onLiveSample]);
+
+  useEffect(() => {
+    onRealCameraChange?.(useRealCamera);
+    // Only fire when the toggle itself changes — onRealCameraChange isn't
+    // expected to change identity in a way that should re-trigger this.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [useRealCamera]);
 
   useEffect(() => {
     if (!useRealCamera) return;

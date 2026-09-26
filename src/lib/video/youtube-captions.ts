@@ -137,11 +137,3 @@ export function captionsToLesson(segments: CaptionSegment[]): {
 
   return { captions, items };
 }
-
-/** The caption line visible at `time`, or null in a gap between lines. */
-export function findCaptionAt(
-  captions: CaptionChunk[],
-  time: number
-): CaptionChunk | null {
-  return captions.find((chunk) => time >= chunk.start && time < chunk.end) ?? null;
-}

@@ -45,6 +45,14 @@ export function TranscriptPanel({
   currentTime,
   onSeek,
   missedIds,
+  isTranscribing,
+  isLiveLesson,
+  transcriptionSupported,
+  transcriptionError,
+  interimText,
+  onStartTranscription,
+  onStopTranscription,
+  onUseDemoLesson,
   keyMomentsSlot,
   visualSummarySlot,
 }: {
@@ -52,6 +60,14 @@ export function TranscriptPanel({
   currentTime: number;
   onSeek: (time: number) => void;
   missedIds: string[];
+  isTranscribing: boolean;
+  isLiveLesson: boolean;
+  transcriptionSupported: boolean;
+  transcriptionError: string | null;
+  interimText: string;
+  onStartTranscription: () => void;
+  onStopTranscription: () => void;
+  onUseDemoLesson: () => void;
   keyMomentsSlot?: ReactNode;
   visualSummarySlot?: ReactNode;
 }) {
@@ -119,12 +135,95 @@ export function TranscriptPanel({
             currentTime={currentTime}
             onSeek={onSeek}
             missedIds={missedIds}
+            isLiveLesson={isLiveLesson}
+            interimText={interimText}
+            controls={
+              <LiveControls
+                isTranscribing={isTranscribing}
+                isLiveLesson={isLiveLesson}
+                supported={transcriptionSupported}
+                error={transcriptionError}
+                onStart={onStartTranscription}
+                onStop={onStopTranscription}
+                onUseDemoLesson={onUseDemoLesson}
+              />
+            }
           />
         )}
         {tab === "Key Moments" && <SlotArea>{keyMomentsSlot}</SlotArea>}
         {tab === "Visual Summary" && <SlotArea>{visualSummarySlot}</SlotArea>}
         {tab === "Notes" && <NotesTab currentTime={currentTime} />}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Source control for the transcript: the scripted demo lesson, or the
+ * microphone transcribing a real one.
+ */
+function LiveControls({
+  isTranscribing,
+  isLiveLesson,
+  supported,
+  error,
+  onStart,
+  onStop,
+  onUseDemoLesson,
+}: {
+  isTranscribing: boolean;
+  isLiveLesson: boolean;
+  supported: boolean;
+  error: string | null;
+  onStart: () => void;
+  onStop: () => void;
+  onUseDemoLesson: () => void;
+}) {
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      {isTranscribing ? (
+        <button
+          type="button"
+          onClick={onStop}
+          className="flex items-center gap-2 rounded-lg bg-rose-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-rose-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
+        >
+          <span
+            aria-hidden
+            className="h-2 w-2 animate-pulse rounded-full bg-white motion-reduce:animate-none"
+          />
+          Stop transcribing
+        </button>
+      ) : (
+        <button
+          type="button"
+          onClick={onStart}
+          disabled={!supported}
+          className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 disabled:cursor-not-allowed disabled:bg-zinc-300 dark:disabled:bg-zinc-700"
+        >
+          Transcribe this lesson
+        </button>
+      )}
+
+      {isLiveLesson && !isTranscribing && (
+        <button
+          type="button"
+          onClick={onUseDemoLesson}
+          className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+        >
+          Back to demo lesson
+        </button>
+      )}
+
+      {!supported && (
+        <p className="text-xs text-zinc-500 dark:text-zinc-400">
+          This browser has no speech recognition — try Chrome or Edge.
+        </p>
+      )}
+      {error && (
+        <p role="alert" className="text-xs text-rose-600 dark:text-rose-400">
+          {error}
+        </p>
+      )}
     </div>
   );
 }
@@ -175,11 +274,17 @@ function CaptionList({
   currentTime,
   onSeek,
   missedIds,
+  isLiveLesson,
+  interimText,
+  controls,
 }: {
   items: TranscriptItem[];
   currentTime: number;
   onSeek: (time: number) => void;
   missedIds: string[];
+  isLiveLesson: boolean;
+  interimText: string;
+  controls: ReactNode;
 }) {
   const activeRef = useRef<HTMLLIElement>(null);
   // Auto-scroll follows playback until the user takes over, so the panel
@@ -237,7 +342,8 @@ function CaptionList({
 
   return (
     <div className="flex h-full flex-col">
-      <div className="shrink-0 px-3 pt-3">
+      <div className="flex shrink-0 flex-col gap-2 px-3 pt-3">
+        {controls}
         <div className="relative">
           <input
             type="search"
@@ -274,11 +380,14 @@ function CaptionList({
             }}
             className="flex h-full flex-col gap-1 overflow-y-auto p-3"
           >
-            {rows.map(({ item, matches }) => {
-              const isActive =
-                !isSearching &&
-                currentTime >= item.start &&
-                currentTime < item.end;
+            {rows.map(({ item, matches }, index) => {
+              // Live transcription has no "current" line in the playback
+              // sense — the newest one is what the student is reading.
+              const isActive = isSearching
+                ? false
+                : isLiveLesson
+                  ? index === rows.length - 1
+                  : currentTime >= item.start && currentTime < item.end;
               const wasMissed = missedIds.includes(item.id);
 
               return (
@@ -320,6 +429,23 @@ function CaptionList({
                 </li>
               );
             })}
+
+            {isLiveLesson && interimText && !isSearching && (
+              <li>
+                <p className="flex gap-3 rounded-lg border-l-4 border-l-transparent px-2.5 py-2 text-left text-sm italic text-zinc-400 dark:text-zinc-500">
+                  <span className="mt-0.5 shrink-0 text-xs tabular-nums">
+                    {formatTime(currentTime)}
+                  </span>
+                  <span className="flex-1">{interimText}…</span>
+                </p>
+              </li>
+            )}
+
+            {isLiveLesson && items.length === 0 && !interimText && (
+              <li className="px-2.5 py-2 text-sm text-zinc-500 dark:text-zinc-400">
+                Listening — start speaking and the lesson will appear here.
+              </li>
+            )}
           </ol>
         )}
 
