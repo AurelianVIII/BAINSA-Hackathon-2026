@@ -115,6 +115,7 @@ export function VideoPanel({
     videoId: string;
     message: string;
   } | null>(null);
+  const [showCaptions, setShowCaptions] = useState(true);
 
   const playerContainerRef = useRef<HTMLDivElement | null>(null);
   /** Set only once the player is ready to take commands. */
@@ -409,27 +410,31 @@ export function VideoPanel({
               <div className="h-16 w-16 rounded-full bg-gradient-to-b from-amber-200 to-amber-300 shadow-md" />
               <div className="h-12 w-20 rounded-t-3xl bg-teal-600 shadow-md" />
             </div>
-            <span className="absolute bottom-[calc(26%+0.5rem)] left-[6%] rounded-full bg-black/60 px-2.5 py-1 text-xs font-medium text-white backdrop-blur-sm">
+            <span className="absolute bottom-3 left-[6%] rounded-full bg-black/60 px-2.5 py-1 text-xs font-medium text-white backdrop-blur-sm">
               Prof. Emma Rossi
             </span>
           </>
         )}
 
-        {/* Burned-in captions. Fixed height so the stage does not jump as
-            chunks change length. Stays on top of a real video too — this is
-            an accessibility product, the captions are the hero element
-            regardless of what is playing underneath. */}
-        <div className="absolute inset-x-0 bottom-0 flex min-h-[26%] items-center justify-center bg-black/75 px-6 py-4 backdrop-blur-sm">
-          {caption || !captionNotice ? (
-            <p className="line-clamp-2 text-center text-2xl font-semibold leading-snug text-white xl:text-3xl">
-              {caption?.text ?? ""}
-            </p>
-          ) : (
-            <p role="status" className="text-center text-base font-medium text-white/75">
-              {captionNotice}
-            </p>
-          )}
-        </div>
+        {/* Floating compact captions. Sleek, unobtrusive badge that only covers
+            minimal space when text is active, leaving the rest of the video fully visible. */}
+        {showCaptions && (caption || captionNotice) && (
+          <div className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center px-4">
+            {caption ? (
+              <div className="max-w-2xl rounded-lg bg-black/85 px-4 py-2 text-center shadow-xl backdrop-blur-sm transition-all duration-150">
+                <p className="text-sm font-medium leading-snug text-white drop-shadow sm:text-base md:text-lg">
+                  {caption.text}
+                </p>
+              </div>
+            ) : captionNotice ? (
+              <div className="max-w-md rounded-md bg-black/80 px-3 py-1 text-center shadow backdrop-blur-sm">
+                <p role="status" className="text-xs font-medium text-zinc-300">
+                  {captionNotice}
+                </p>
+              </div>
+            ) : null}
+          </div>
+        )}
       </div>
 
       {/* Controls */}
@@ -448,6 +453,19 @@ export function VideoPanel({
           className="rounded-full border border-zinc-300 px-2.5 py-1.5 text-xs font-medium tabular-nums text-zinc-700 hover:bg-zinc-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-900 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
         >
           {speed}×
+        </button>
+        <button
+          type="button"
+          onClick={() => setShowCaptions((prev) => !prev)}
+          aria-pressed={showCaptions}
+          title={showCaptions ? "Hide captions" : "Show captions"}
+          className={`rounded-full border px-2.5 py-1.5 text-xs font-bold transition focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-900 ${
+            showCaptions
+              ? "border-zinc-900 bg-zinc-900 text-white dark:border-zinc-100 dark:bg-zinc-100 dark:text-zinc-900"
+              : "border-zinc-300 text-zinc-500 hover:bg-zinc-50 dark:border-zinc-700 dark:text-zinc-400 dark:hover:bg-zinc-800"
+          }`}
+        >
+          CC
         </button>
         <span className="w-20 shrink-0 text-xs tabular-nums text-zinc-500 dark:text-zinc-400">
           {formatTime(currentTime)} / {formatTime(duration)}

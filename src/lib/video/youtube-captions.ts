@@ -112,12 +112,19 @@ export function captionsToLesson(segments: CaptionSegment[]): {
     const start = group[0].start;
     const block = Math.floor(start / TOPIC_BLOCK_SECONDS);
 
+    const itemText = group.map((segment) => segment.text).join(" ");
+    const isImportant =
+      /\b(formula|equation|reaction|is defined|key point|important|remember|rule|step 1|first step|notice that|this means|therefore|converts?|produces?|example|solve)\b/i.test(
+        itemText
+      ) || items.length === 0;
+
     items.push({
       id,
       start,
       end: group[group.length - 1].end,
-      text: group.map((segment) => segment.text).join(" "),
+      text: itemText,
       topic: `Minutes ${block * blockMinutes}–${(block + 1) * blockMinutes}`,
+      importance: isImportant ? "high" : "normal",
     });
     group.forEach((segment, index) =>
       captions.push({ id: `${id}-c${index + 1}`, itemId: id, ...segment })

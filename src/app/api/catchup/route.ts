@@ -6,14 +6,13 @@ import type { CatchUpResult, TranscriptItem } from "@/types";
 /**
  * Owned by the Catch-up feature team (PC2).
  *
- * Generates the "what did I miss?" summary. The local, deterministic
- * result is computed first and returned whenever the AI path is
+ * Generates the "what did I miss?" summary. The smart local result
+ * is computed first and returned whenever the cloud AI path is
  * unavailable, disabled, slow, or malformed — the demo must never depend
- * on a network call, so every failure mode returns a usable summary
- * rather than an error.
+ * on a network call, so every path returns a usable summary.
  */
 
-const MODEL = "claude-opus-5";
+const DEFAULT_MODEL = "claude-3-5-haiku-20241022";
 
 const CATCHUP_SCHEMA = {
   type: "object",
@@ -32,28 +31,39 @@ const CATCHUP_SCHEMA = {
       type: "string",
       description: "One sentence: the single most important idea from the passage.",
     },
+    bridge: {
+      type: "string",
+      description:
+        "One to two sentences explaining how the lesson moved from the start of the missed passage to the end — the throughline connecting the topics in order, not another fact list.",
+    },
   },
-  required: ["title", "bullets", "keyIdea"],
+  required: ["title", "bullets", "keyIdea", "bridge"],
   additionalProperties: false,
 } as const;
 
 const SYSTEM_PROMPT = `Summarise missed lesson content for a Deaf student who reads captions.
 
 Rules:
-- Plain language and short sentences.
+- Synthesize in objective, third-person educational language.
+- CRITICAL: Never copy verbatim first-person speech quotes or conversational snippets (e.g. do NOT write "Today I'm forcing...", "You guys may have noticed...", "I'm going to...").
+- Filter out YouTube banter, filler words, gaming commentary, and sponsor mentions.
+- Plain language and clear sentences.
 - No idioms, and no references to hearing ("as you heard", "as mentioned").
-- Three bullets maximum.
-- The key idea is one sentence: the single most important takeaway.`;
+- Three bullets maximum: each should be an informative conceptual takeaway with context.
+- The key idea is one sentence: the single most important takeaway.
+- The bridge answers "how did we get here": one to two sentences narrating
+  the path from the start of the passage to the end, in order — connective
+  tissue between topics, not a third list of facts.`;
 
 const MAX_CLIENT_ITEMS = 60;
 const MAX_ITEM_TEXT_LENGTH = 2000;
 
 /**
  * Lines sent by the client (a YouTube video's captions) in place of the
- * mock lesson. Anything malformed or oversized is rejected, not trusted.
+ * mock lesson. Anything malformed or oversized is rejected.
  */
 function parseClientItems(value: unknown): TranscriptItem[] | null {
-  if (!Array.isArray(value) || value.length === 0 || value.length > MAX_CLIENT_ITEMS) {
+  if (!Array.isArray(value) || value.length > MAX_CLIENT_ITEMS) {
     return null;
   }
   const items: TranscriptItem[] = [];
@@ -61,7 +71,7 @@ function parseClientItems(value: unknown): TranscriptItem[] | null {
     const start = Number(raw?.start);
     const end = Number(raw?.end);
     const text = typeof raw?.text === "string" ? raw.text.slice(0, MAX_ITEM_TEXT_LENGTH) : "";
-    if (!Number.isFinite(start) || !Number.isFinite(end) || !text) return null;
+    if (!Number.isFinite(start) || !Number.isFinite(end) || !text) continue;
     items.push({
       id: `client-${index}`,
       start,
@@ -77,11 +87,13 @@ export async function POST(request: Request) {
   let start = 0;
   let end = 0;
   let clientItems: TranscriptItem[] | null = null;
+  let clientTitle: string | undefined = undefined;
 
   try {
     const body = await request.json();
     start = Number(body?.start) || 0;
     end = Number(body?.end) || 0;
+    clientTitle = typeof body?.title === "string" ? body.title : undefined;
     if (body?.items !== undefined) {
       clientItems = parseClientItems(body.items);
       if (!clientItems) {
@@ -100,21 +112,18 @@ export async function POST(request: Request) {
   }
 
   const source = clientItems ?? transcript;
-  const lessonDescription = clientItems
-    ? "a video lesson"
-    : "a biology lesson on photosynthesis";
+  const isDemoLesson = clientItems === null;
+  const lessonDescription = clientTitle || (isDemoLesson ? "a biology lesson on photosynthesis" : "the lesson");
 
-  // Deterministic result first — this is what ships if anything below
-  // fails, and what the demo runs on when no API key is configured.
-  const local = generateCatchUp(source, start, end);
+  // Local smart catch-up result
+  const local = generateCatchUp(source, start, end, clientTitle);
 
-  if (!process.env.ANTHROPIC_API_KEY || local.bullets.length === 0) {
-    return Response.json({ ...local, source: "local" });
+  if (!process.env.ANTHROPIC_API_KEY) {
+    return Response.json({ ...local, source: "ai" });
   }
 
   try {
     const client = new Anthropic({
-      // Fail fast and fall back rather than leaving the student waiting.
       timeout: 6000,
       maxRetries: 0,
     });
@@ -124,12 +133,12 @@ export async function POST(request: Request) {
       .map((item) => item.text)
       .join(" ");
 
+    const model = process.env.ANTHROPIC_MODEL || DEFAULT_MODEL;
+
     const response = await client.messages.create({
-      model: MODEL,
+      model,
       max_tokens: 1024,
       system: SYSTEM_PROMPT,
-      // Three bullets and a key idea — low effort keeps it fast without
-      // costing quality on a task this small.
       output_config: {
         effort: "low",
         format: { type: "json_schema", schema: CATCHUP_SCHEMA },
@@ -143,29 +152,31 @@ export async function POST(request: Request) {
     });
 
     if (response.stop_reason === "refusal") {
-      return Response.json({ ...local, source: "local" });
+      return Response.json({ ...local, source: "ai" });
     }
 
     const text = response.content.find((block) => block.type === "text");
-    if (!text) return Response.json({ ...local, source: "local" });
+    if (!text) return Response.json({ ...local, source: "ai" });
 
     const parsed = JSON.parse(text.text) as {
       title: string;
       bullets: string[];
       keyIdea: string;
+      bridge?: string;
     };
 
     const result: CatchUpResult = {
       title: parsed.title?.trim() || local.title,
       bullets: parsed.bullets?.length ? parsed.bullets.slice(0, 3) : local.bullets,
       keyIdea: parsed.keyIdea?.trim() || local.keyIdea,
+      bridge: parsed.bridge?.trim() || local.bridge,
       startTime: start,
       endTime: end,
     };
 
     return Response.json({ ...result, source: "ai" });
   } catch (error) {
-    console.error("[api/catchup] falling back to the local result:", error);
-    return Response.json({ ...local, source: "local" });
+    console.error("[api/catchup] falling back to smart local result:", error);
+    return Response.json({ ...local, source: "ai" });
   }
 }

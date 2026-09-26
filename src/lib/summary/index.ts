@@ -79,26 +79,44 @@ const TOPIC_TEXT: Record<string, string> = {
     "Photosynthesis is the base of almost every food chain, and it keeps atmospheric carbon dioxide in check. Researchers are studying artificial photosynthesis to make clean fuels.",
 };
 
-const FALLBACK_TEXT =
-  "Photosynthesis has two stages. The first uses sunlight and water to make ATP and NADPH. The second uses those, plus carbon dioxide, to make glucose.";
+import {
+  generateSmartSummary,
+  generateTopicGist,
+} from "@/lib/ai/smart-summarizer";
 
 /** One-line gist per topic, for the lesson-at-a-glance tab. */
-export function getTopicGist(topic: string): string {
+export function getTopicGist(topic: string, topicItems?: TranscriptItem[]): string {
   const text = TOPIC_TEXT[topic];
-  if (!text) return FALLBACK_TEXT;
-
-  const first = text.split(". ")[0];
-  return first.endsWith(".") ? first : `${first}.`;
+  if (text) {
+    const first = text.split(". ")[0];
+    return first.endsWith(".") ? first : `${first}.`;
+  }
+  return generateTopicGist(topic, topicItems);
 }
 
-/** Transcript lines overlapping a time window. */
+/** Transcript lines overlapping a time window, with boundary padding fallback. */
 export function getItemsInWindow(
   transcriptItems: TranscriptItem[],
   window: { start: number; end: number }
 ): TranscriptItem[] {
-  return transcriptItems.filter(
+  const strict = transcriptItems.filter(
     (item) => item.end > window.start && item.start < window.end
   );
+  if (strict.length > 0 || transcriptItems.length === 0) {
+    return strict;
+  }
+
+  // Gracefully handle alerts during brief speech pauses or near boundaries
+  const padded = transcriptItems.filter(
+    (item) => item.end > window.start - 15 && item.start < window.end + 15
+  );
+  if (padded.length > 0) return padded;
+
+  // Closest item
+  const sorted = [...transcriptItems].sort(
+    (a, b) => Math.abs(a.start - window.start) - Math.abs(b.start - window.start)
+  );
+  return sorted.slice(0, 1);
 }
 
 /**
@@ -110,6 +128,7 @@ function dominantTopic(items: TranscriptItem[], window: { start: number; end: nu
   const seconds: Record<string, number> = {};
 
   for (const item of items) {
+    if (!item.topic) continue;
     const overlap =
       Math.min(item.end, window.end) - Math.max(item.start, window.start);
     if (overlap > 0) seconds[item.topic] = (seconds[item.topic] ?? 0) + overlap;
@@ -154,15 +173,7 @@ export function graphForNodeIds(ids: string[]) {
  * Always returns a diagram with at least one node — an empty panel during
  * the demo is worse than a slightly too-broad one.
  */
-/** Trim a passage to roughly `limit` characters on a sentence boundary. */
-function condense(text: string, limit = 320): string {
-  const clean = text.replace(/\s+/g, " ").trim();
-  if (clean.length <= limit) return clean;
 
-  const cut = clean.slice(0, limit);
-  const lastStop = cut.lastIndexOf(". ");
-  return lastStop > limit * 0.5 ? cut.slice(0, lastStop + 1) : `${cut.trim()}…`;
-}
 
 /**
  * Summary for a lesson this module has no authored content for — anything
@@ -176,33 +187,28 @@ function condense(text: string, limit = 320): string {
  */
 function summariseUnknownLesson(
   items: TranscriptItem[],
-  topic: string | null
+  topic: string | null,
+  window?: { start: number; end: number },
+  context?: { lessonTitle?: string }
 ): VisualSummaryData {
-  const said = condense(items.map((item) => item.text).join(" "));
-
-  // "Live" is the bucket label the transcriber stamps on every line, not a
-  // subject — it tells the student nothing as a heading.
-  const heading = !topic || topic === "Live" ? "What you missed" : topic;
-
-  return {
-    title: heading,
-    text: said || "Nothing was captured during this stretch of the lesson.",
-    nodes: [],
-    edges: [],
-  };
+  return generateSmartSummary(items, window, {
+    dominantTopic: topic,
+    lessonTitle: context?.lessonTitle,
+  });
 }
 
 export function buildVisualSummary(
   transcriptItems: TranscriptItem[],
-  window: { start: number; end: number }
+  window: { start: number; end: number },
+  context?: { lessonTitle?: string }
 ): VisualSummaryData {
   const items = getItemsInWindow(transcriptItems, window);
   const topic = dominantTopic(items, window);
 
   // The authored text/diagram only covers the built-in demo lesson's
-  // topics. Anything else gets summarised from its own transcript.
+  // topics. Anything else gets summarised intelligently from its own transcript.
   const authored = topic ? TOPIC_TEXT[topic] : undefined;
-  if (!authored) return summariseUnknownLesson(items, topic);
+  if (!authored) return summariseUnknownLesson(items, topic, window, context);
 
   const ids = topic ? TOPIC_NODE_IDS[topic] : undefined;
   const graph = ids ? subgraph(ids) : { nodes: FULL_NODES, edges: FULL_EDGES };

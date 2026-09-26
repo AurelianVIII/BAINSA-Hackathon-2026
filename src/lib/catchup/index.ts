@@ -1,37 +1,94 @@
 import type { AttentionEvent, CatchUpResult, TranscriptItem } from "@/types";
 import type { MissedWindow } from "./types";
 
-const MAX_BULLETS = 3;
 const MERGE_GAP_SECONDS = 5;
 const PENDING_ALERT_WINDOW_SECONDS = 8;
+
+import { generateSmartCatchUp } from "@/lib/ai/smart-summarizer";
 
 /**
  * Owned by the Catch-up feature team.
  *
- * Condensed summary: first clause of each missed line, capped at
- * `MAX_BULLETS`, plus the highest-importance line as the key idea.
+ * Condensed summary: clean, plain-language bullets capped at `MAX_BULLETS`,
+ * plus the highest-importance line or central concept as the key idea.
  */
 export function generateCatchUp(
   transcriptItems: TranscriptItem[],
   fromTime: number,
-  toTime: number
+  toTime: number,
+  lessonTitle?: string
 ): CatchUpResult {
-  const missed = transcriptItems.filter(
-    (item) => item.end > fromTime && item.start < toTime
+  const safeStart = Math.max(0, fromTime);
+  const safeEnd = Math.max(safeStart + 1, toTime);
+  let missed = transcriptItems.filter(
+    (item) => item.end > safeStart && item.start < safeEnd
   );
 
+  // If the window fell in a quiet pause or near start/end, grab adjacent context
+  if (missed.length === 0 && transcriptItems.length > 0) {
+    missed = transcriptItems.filter(
+      (item) => item.end > safeStart - 25 && item.start < safeEnd + 25
+    );
+    if (missed.length === 0) {
+      const sorted = [...transcriptItems].sort(
+        (a, b) => Math.abs(a.start - safeStart) - Math.abs(b.start - safeStart)
+      );
+      missed = sorted.slice(0, 2);
+    }
+  }
+
+  const smart = generateSmartCatchUp(missed, safeStart, safeEnd, lessonTitle);
   return {
-    title: missed[0]?.topic ?? "What you missed",
-    bullets: missed.slice(0, MAX_BULLETS).map((item) => firstClause(item.text)),
-    keyIdea: missed.find((item) => item.importance === "high")?.text ?? missed[0]?.text ?? "",
-    startTime: fromTime,
-    endTime: toTime,
+    ...smart,
+    bridge: buildBridge(transcriptItems, safeStart, safeEnd),
   };
 }
 
-function firstClause(text: string): string {
-  const match = text.match(/^(.*?)(,| — | - |;)/);
-  return (match ? match[1] : text).trim();
+/**
+ * Narrates the throughline of a missed stretch: not what was said, but how
+ * the lesson moved from the topic the student left on to the topic it's on
+ * now. "Catch me up" answers "what did I miss"; this answers "how did we
+ * get here" — the connective tissue a flat bullet list doesn't give.
+ */
+export function buildBridge(
+  transcriptItems: TranscriptItem[],
+  fromTime: number,
+  toTime: number
+): string {
+  const missed = transcriptItems.filter(
+    (item) => item.end > fromTime && item.start < toTime
+  );
+  if (missed.length === 0) {
+    return "Nothing new was covered while you were away.";
+  }
+
+  const topics: string[] = [];
+  for (const item of missed) {
+    const t = item.topic?.trim();
+    if (
+      t &&
+      t !== "What you missed" &&
+      t !== "Live" &&
+      !t.startsWith("Minutes ") &&
+      topics[topics.length - 1] !== t
+    ) {
+      topics.push(t);
+    }
+  }
+
+  if (topics.length === 0) {
+    return "The instructor continued explaining the current material during this segment.";
+  }
+
+  if (topics.length === 1) {
+    return `The lesson stayed on ${topics[0]} the whole time you were away.`;
+  }
+
+  const [from, ...rest] = topics;
+  const to = rest[rest.length - 1];
+  const through = rest.slice(0, -1);
+  const stops = through.length > 0 ? ` through ${through.join(", ")}` : "";
+  return `You left during ${from}. Since then the lesson moved${stops} to ${to} — that's where it is now.`;
 }
 
 /**
@@ -53,9 +110,20 @@ export function buildMissedWindow(
   const start = Math.min(...cluster.map((e) => e.start), event.start);
   const end = Math.max(...cluster.map((e) => e.end), event.end);
 
-  const overlapping = transcript.filter(
+  let overlapping = transcript.filter(
     (item) => item.end > start && item.start < end
   );
+  if (overlapping.length === 0 && transcript.length > 0) {
+    overlapping = transcript.filter(
+      (item) => item.end > start - 15 && item.start < end + 15
+    );
+    if (overlapping.length === 0) {
+      const sorted = [...transcript].sort(
+        (a, b) => Math.abs(a.start - start) - Math.abs(b.start - start)
+      );
+      overlapping = sorted.slice(0, 1);
+    }
+  }
 
   return {
     id: event.id,

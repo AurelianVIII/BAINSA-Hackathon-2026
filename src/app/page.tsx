@@ -11,6 +11,7 @@ import { Header } from "@/components/layout/Header";
 import { VideoPanel } from "@/components/video/VideoPanel";
 import { TranscriptPanel } from "@/components/transcript/TranscriptPanel";
 import { CatchUpButton } from "@/components/catchup/CatchUpButton";
+import { AwayCatchUp } from "@/components/catchup/AwayCatchUp";
 import { MissedAlert } from "@/components/catchup/MissedAlert";
 import { AttentionTracker } from "@/components/attention/AttentionTracker";
 import { AttentionTimeline } from "@/components/attention/AttentionTimeline";
@@ -258,7 +259,12 @@ export default function Home() {
         ? `${youtubeCaptions.message} You can use “Transcribe this lesson” to caption it live.`
         : null;
 
-  const attentionSample = getSampleAt(attentionSamples, currentTime);
+  const [latestLiveSample, setLatestLiveSample] = useState<AttentionSample | null>(null);
+  const currentRecordedSample = hasRealCamera
+    ? (latestLiveSample ?? recordedSamples[Math.round(currentTime)])
+    : undefined;
+  const attentionSample =
+    currentRecordedSample ?? getSampleAt(attentionSamples, currentTime);
   const attentionLevel = getAttentionLevel(attentionSample);
   // Live captions show the phrase still being spoken, then the last one
   // committed. Waiting for the recogniser to finalise a sentence would put
@@ -280,6 +286,7 @@ export default function Home() {
   // with the camera still running) would keep overwriting what actually
   // happened there with whatever's happening now.
   const handleLiveAttentionSample = (sample: AttentionSample) => {
+    setLatestLiveSample(sample);
     const key = Math.round(sample.t);
     setRecordedSamples((prev) => (key in prev ? prev : { ...prev, [key]: sample }));
   };
@@ -472,9 +479,28 @@ export default function Home() {
           <AiSummaryPanel
             request={summaryRequest}
             items={activeTranscript}
+            lessonTitle={
+              isLiveLesson
+                ? "Live Transcribed Lesson"
+                : isYouTube
+                  ? (youtubeMeta?.title ?? "YouTube Video")
+                  : LESSON_TITLE
+            }
           />
 
           <CatchUpButton
+            currentTime={currentTime}
+            items={activeTranscript}
+            title={
+              isLiveLesson
+                ? "Live Transcribed Lesson"
+                : isYouTube
+                  ? (youtubeMeta?.title ?? "YouTube Video")
+                  : LESSON_TITLE
+            }
+          />
+
+          <AwayCatchUp
             currentTime={currentTime}
             items={activeTranscript}
           />
@@ -488,6 +514,9 @@ export default function Home() {
           duration={activeDuration}
           currentTime={currentTime}
           onSeek={handleSeek}
+          sample={attentionSample}
+          level={attentionLevel}
+          useRealCamera={hasRealCamera}
         />
       </div>
     </div>

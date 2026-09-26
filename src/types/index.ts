@@ -49,6 +49,9 @@ export interface CatchUpResult {
   title: string;
   bullets: string[];
   keyIdea: string;
+  /** 1-2 sentences on how the lesson moved from the start of the window to
+   *  the end — the throughline between topics, not another fact list. */
+  bridge?: string;
   startTime: number;
   endTime: number;
 }

@@ -346,8 +346,14 @@ function CaptionList({
             )}
 
             {isLiveLesson && items.length === 0 && !interimText && (
-              <li className="px-2.5 py-2 text-sm text-zinc-500 dark:text-zinc-400">
+              <li className="px-2.5 py-6 text-center text-sm text-zinc-500 dark:text-zinc-400">
                 Listening — start speaking and the lesson will appear here.
+              </li>
+            )}
+
+            {!isLiveLesson && items.length === 0 && (
+              <li className="px-2.5 py-8 text-center text-sm text-zinc-500 dark:text-zinc-400">
+                Captions will appear here once the lesson begins.
               </li>
             )}
           </ol>
