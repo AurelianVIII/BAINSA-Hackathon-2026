@@ -24,6 +24,7 @@ export function generateCatchUp(
     title: missed[0]?.topic ?? "What you missed",
     bullets: missed.slice(0, MAX_BULLETS).map((item) => firstClause(item.text)),
     keyIdea: missed.find((item) => item.importance === "high")?.text ?? missed[0]?.text ?? "",
+    bridge: buildBridge(transcriptItems, fromTime, toTime),
     startTime: fromTime,
     endTime: toTime,
   };
@@ -32,6 +33,40 @@ export function generateCatchUp(
 function firstClause(text: string): string {
   const match = text.match(/^(.*?)(,| — | - |;)/);
   return (match ? match[1] : text).trim();
+}
+
+/**
+ * Narrates the throughline of a missed stretch: not what was said, but how
+ * the lesson moved from the topic the student left on to the topic it's on
+ * now. "Catch me up" answers "what did I miss"; this answers "how did we
+ * get here" — the connective tissue a flat bullet list doesn't give.
+ */
+export function buildBridge(
+  transcriptItems: TranscriptItem[],
+  fromTime: number,
+  toTime: number
+): string {
+  const missed = transcriptItems.filter(
+    (item) => item.end > fromTime && item.start < toTime
+  );
+  if (missed.length === 0) {
+    return "Nothing new was covered while you were away.";
+  }
+
+  const topics: string[] = [];
+  for (const item of missed) {
+    if (topics[topics.length - 1] !== item.topic) topics.push(item.topic);
+  }
+
+  if (topics.length === 1) {
+    return `The lesson stayed on ${topics[0]} the whole time you were away.`;
+  }
+
+  const [from, ...rest] = topics;
+  const to = rest[rest.length - 1];
+  const through = rest.slice(0, -1);
+  const stops = through.length > 0 ? ` through ${through.join(", ")}` : "";
+  return `You left during ${from}. Since then the lesson moved${stops} to ${to} — that's where it is now.`;
 }
 
 /**

@@ -32,8 +32,13 @@ const CATCHUP_SCHEMA = {
       type: "string",
       description: "One sentence: the single most important idea from the passage.",
     },
+    bridge: {
+      type: "string",
+      description:
+        "One to two sentences explaining how the lesson moved from the start of the missed passage to the end — the throughline connecting the topics in order, not another fact list.",
+    },
   },
-  required: ["title", "bullets", "keyIdea"],
+  required: ["title", "bullets", "keyIdea", "bridge"],
   additionalProperties: false,
 } as const;
 
@@ -43,7 +48,10 @@ Rules:
 - Plain language and short sentences.
 - No idioms, and no references to hearing ("as you heard", "as mentioned").
 - Three bullets maximum.
-- The key idea is one sentence: the single most important takeaway.`;
+- The key idea is one sentence: the single most important takeaway.
+- The bridge answers "how did we get here": one to two sentences narrating
+  the path from the start of the passage to the end, in order — connective
+  tissue between topics, not a third list of facts.`;
 
 const MAX_CLIENT_ITEMS = 60;
 const MAX_ITEM_TEXT_LENGTH = 2000;
@@ -153,12 +161,14 @@ export async function POST(request: Request) {
       title: string;
       bullets: string[];
       keyIdea: string;
+      bridge?: string;
     };
 
     const result: CatchUpResult = {
       title: parsed.title?.trim() || local.title,
       bullets: parsed.bullets?.length ? parsed.bullets.slice(0, 3) : local.bullets,
       keyIdea: parsed.keyIdea?.trim() || local.keyIdea,
+      bridge: parsed.bridge?.trim() || local.bridge,
       startTime: start,
       endTime: end,
     };

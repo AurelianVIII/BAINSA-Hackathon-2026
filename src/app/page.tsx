@@ -11,6 +11,7 @@ import { Header } from "@/components/layout/Header";
 import { VideoPanel } from "@/components/video/VideoPanel";
 import { TranscriptPanel } from "@/components/transcript/TranscriptPanel";
 import { CatchUpButton } from "@/components/catchup/CatchUpButton";
+import { AwayCatchUp } from "@/components/catchup/AwayCatchUp";
 import { MissedAlert } from "@/components/catchup/MissedAlert";
 import { AttentionTracker } from "@/components/attention/AttentionTracker";
 import { AttentionTimeline } from "@/components/attention/AttentionTimeline";
@@ -487,6 +488,11 @@ export default function Home() {
           />
 
           <CatchUpButton
+            currentTime={currentTime}
+            items={isDemoLesson ? undefined : activeTranscript}
+          />
+
+          <AwayCatchUp
             currentTime={currentTime}
             items={isDemoLesson ? undefined : activeTranscript}
           />
