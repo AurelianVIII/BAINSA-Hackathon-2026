@@ -21,6 +21,8 @@ const WHITEBOARD_POINTS = [
  * so the captions are the hero element and are sized like it.
  */
 export function VideoPanel({
+  subject,
+  title,
   currentTime,
   duration,
   isPlaying,
@@ -30,6 +32,8 @@ export function VideoPanel({
   onSpeedChange,
   onSeek,
 }: {
+  subject: string;
+  title: string;
   currentTime: number;
   duration: number;
   isPlaying: boolean;
@@ -41,6 +45,17 @@ export function VideoPanel({
 }) {
   return (
     <div className="flex shrink-0 flex-col gap-2.5 rounded-xl border border-zinc-200 bg-white p-3 shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
+      {/* Say what the lesson is — a stranger should not have to infer it
+          from the whiteboard bullets. */}
+      <div className="flex items-baseline gap-2">
+        <span className="shrink-0 rounded-full bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
+          {subject}
+        </span>
+        <h2 className="truncate text-sm font-semibold text-zinc-900 dark:text-zinc-50">
+          {title}
+        </h2>
+      </div>
+
       <div className="relative aspect-video max-h-[42vh] w-full overflow-hidden rounded-lg bg-gradient-to-br from-slate-800 to-slate-900">
         {/* Whiteboard */}
         <div className="absolute left-[6%] top-[10%] h-[62%] w-[52%] rounded-md bg-slate-50 p-4 shadow-lg">
@@ -93,6 +108,9 @@ export function VideoPanel({
         </button>
         <span className="w-20 shrink-0 text-xs tabular-nums text-zinc-500 dark:text-zinc-400">
           {formatTime(currentTime)} / {formatTime(duration)}
+        </span>
+        <span className="hidden shrink-0 text-xs text-zinc-400 xl:inline dark:text-zinc-500">
+          Space play · ← → seek
         </span>
         <input
           type="range"

@@ -20,6 +20,11 @@ import { buildMissedWindow, getPendingAlert } from "@/lib/catchup";
 import type { MissedWindow } from "@/types";
 
 const LESSON_DURATION = 300;
+const LESSON_SUBJECT = "Biology";
+const LESSON_TITLE = "Photosynthesis and the Calvin Cycle";
+
+/** Seconds moved by the left/right arrow shortcuts. */
+const SEEK_STEP_SECONDS = 5;
 
 /** Event types that mean the student actually lost the thread. */
 const MISSED_EVENT_TYPES = ["looking-away", "low-attention"] as const;
@@ -45,6 +50,40 @@ export default function Home() {
   useEffect(() => {
     currentTimeRef.current = currentTime;
   }, [currentTime]);
+
+  // Keyboard shortcuts for driving playback hands-free. Interactive
+  // elements are skipped so this never steals space from a focused button
+  // or arrow keys from the tablist, the slider or a textarea.
+  useEffect(() => {
+    const handleKeyDown = (event: globalThis.KeyboardEvent) => {
+      if (event.metaKey || event.ctrlKey || event.altKey) return;
+
+      const target = event.target as HTMLElement | null;
+      if (
+        target?.closest(
+          "button, a, input, textarea, select, [role='tab'], [contenteditable='true']"
+        )
+      ) {
+        return;
+      }
+
+      if (event.key === " " || event.key.toLowerCase() === "k") {
+        event.preventDefault();
+        setIsPlaying((playing) => !playing);
+      } else if (event.key === "ArrowLeft") {
+        event.preventDefault();
+        setCurrentTime((time) => Math.max(0, time - SEEK_STEP_SECONDS));
+      } else if (event.key === "ArrowRight") {
+        event.preventDefault();
+        setCurrentTime((time) =>
+          Math.min(LESSON_DURATION, time + SEEK_STEP_SECONDS)
+        );
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
+  }, []);
 
   // The playback clock. Everything on this screen is time-driven, so this
   // interval is what makes the demo move at all.
@@ -102,6 +141,8 @@ export default function Home() {
         {/* Left column: the lesson itself. */}
         <div className="flex min-h-0 flex-col gap-3">
           <VideoPanel
+            subject={LESSON_SUBJECT}
+            title={LESSON_TITLE}
             currentTime={currentTime}
             duration={LESSON_DURATION}
             isPlaying={isPlaying}

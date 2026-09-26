@@ -1,10 +1,13 @@
 "use client";
 
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from "react";
 import type { TranscriptItem } from "@/types";
 
 const TABS = ["Live Captions", "Key Moments", "Visual Summary", "Notes"] as const;
 type Tab = (typeof TABS)[number];
+
+/** Stable DOM ids so each tab can point at its panel. */
+const slug = (tab: Tab) => tab.toLowerCase().replace(/\s+/g, "-");
 
 function formatTime(seconds: number) {
   const m = Math.floor(seconds / 60);
@@ -12,6 +15,13 @@ function formatTime(seconds: number) {
     .toString()
     .padStart(2, "0");
   return `${m}:${s}`;
+}
+
+function prefersReducedMotion() {
+  return (
+    typeof window !== "undefined" &&
+    window.matchMedia("(prefers-reduced-motion: reduce)").matches
+  );
 }
 
 /**
@@ -37,6 +47,23 @@ export function TranscriptPanel({
   visualSummarySlot?: ReactNode;
 }) {
   const [tab, setTab] = useState<Tab>("Live Captions");
+  const tabRefs = useRef<(HTMLButtonElement | null)[]>([]);
+
+  // Arrow/Home/End navigation, as expected of a tablist.
+  const handleTabKeyDown = (event: KeyboardEvent, index: number) => {
+    const lastIndex = TABS.length - 1;
+    let next: number | null = null;
+
+    if (event.key === "ArrowRight") next = index === lastIndex ? 0 : index + 1;
+    else if (event.key === "ArrowLeft") next = index === 0 ? lastIndex : index - 1;
+    else if (event.key === "Home") next = 0;
+    else if (event.key === "End") next = lastIndex;
+
+    if (next === null) return;
+    event.preventDefault();
+    setTab(TABS[next]);
+    tabRefs.current[next]?.focus();
+  };
 
   return (
     <div className="flex min-h-0 flex-1 flex-col rounded-xl border border-zinc-200 bg-white shadow-sm dark:border-zinc-800 dark:bg-zinc-900">
@@ -45,13 +72,21 @@ export function TranscriptPanel({
         aria-label="Lesson record"
         className="flex shrink-0 gap-1 overflow-x-auto border-b border-zinc-200 px-2 pt-2 dark:border-zinc-800"
       >
-        {TABS.map((name) => (
+        {TABS.map((name, index) => (
           <button
             key={name}
+            id={`tab-${slug(name)}`}
+            ref={(node) => {
+              tabRefs.current[index] = node;
+            }}
             role="tab"
             type="button"
             aria-selected={tab === name}
+            aria-controls={`panel-${slug(name)}`}
+            // Roving tabindex: the tablist is one tab stop, arrows move within.
+            tabIndex={tab === name ? 0 : -1}
             onClick={() => setTab(name)}
+            onKeyDown={(event) => handleTabKeyDown(event, index)}
             className={`whitespace-nowrap rounded-t-lg px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 ${
               tab === name
                 ? "border-b-2 border-indigo-600 text-indigo-700 dark:text-indigo-300"
@@ -63,7 +98,12 @@ export function TranscriptPanel({
         ))}
       </div>
 
-      <div className="min-h-0 flex-1 overflow-hidden">
+      <div
+        role="tabpanel"
+        id={`panel-${slug(tab)}`}
+        aria-labelledby={`tab-${slug(tab)}`}
+        className="min-h-0 flex-1 overflow-hidden"
+      >
         {tab === "Live Captions" && (
           <CaptionList
             items={items}
@@ -107,17 +147,32 @@ function CaptionList({
   // Auto-scroll follows playback until the user takes over, so the panel
   // never fights someone reading back through the lesson.
   const [following, setFollowing] = useState(true);
+  // Distinguishes our own scrolling from the user's, so the guard catches
+  // the keyboard and the scrollbar too — not just the wheel.
+  const selfScrolling = useRef(false);
 
   useEffect(() => {
     if (!following) return;
-    activeRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+
+    selfScrolling.current = true;
+    activeRef.current?.scrollIntoView({
+      block: "center",
+      behavior: prefersReducedMotion() ? "auto" : "smooth",
+    });
+
+    // Long enough to cover a smooth scroll settling.
+    const release = setTimeout(() => {
+      selfScrolling.current = false;
+    }, 700);
+    return () => clearTimeout(release);
   }, [currentTime, following]);
 
   return (
     <div className="relative h-full">
       <ol
-        onWheel={() => setFollowing(false)}
-        onTouchMove={() => setFollowing(false)}
+        onScroll={() => {
+          if (!selfScrolling.current) setFollowing(false);
+        }}
         className="flex h-full flex-col gap-1 overflow-y-auto p-3"
       >
         {items.map((item) => {
@@ -153,7 +208,7 @@ function CaptionList({
                 </span>
                 {wasMissed && (
                   <span
-                    title="You missed this"
+                    aria-hidden
                     className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-red-600 text-xs font-bold text-white"
                   >
                     !
@@ -187,8 +242,9 @@ function NotesTab({ currentTime }: { currentTime: number }) {
       <button
         type="button"
         onClick={() =>
-          setNotes((text) =>
-            `${text}${text && !text.endsWith("\n") ? "\n" : ""}[${formatTime(currentTime)}] `
+          setNotes(
+            (text) =>
+              `${text}${text && !text.endsWith("\n") ? "\n" : ""}[${formatTime(currentTime)}] `
           )
         }
         className="self-start rounded-lg border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
