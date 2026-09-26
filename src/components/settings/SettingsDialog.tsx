@@ -20,10 +20,10 @@ function OnDeviceAiSection() {
         On-device AI summaries
       </span>
       <p className="mt-0.5 text-xs text-zinc-500 dark:text-zinc-400">
-        Runs SmolLM2-360M in this browser on WebGPU to pick out the key
-        point of a missed passage. It only ever highlights the teacher&apos;s
-        own sentences — it never writes new text, so it cannot get a fact
-        wrong. Nothing leaves your device.
+        Runs SmolLM2-360M in this browser on WebGPU to pick the one line
+        that gets you back on track after looking away. It only ever
+        highlights the teacher&apos;s own sentences — it never writes new
+        text, so it cannot get a fact wrong. Nothing leaves your device.
       </p>
 
       {!supported && (

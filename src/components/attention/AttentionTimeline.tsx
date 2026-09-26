@@ -354,18 +354,25 @@ export function AttentionTimeline({
             }
           }}
         >
-          {bands.map((segment, i) => (
-            <div
-              key={i}
-              className="absolute top-0 bottom-0"
-              style={{
-                left: `${(segment.start / duration) * 100}%`,
-                width: `${((segment.end - segment.start) / duration) * 100}%`,
-                backgroundColor: BAND_COLOR[segment.band],
-                opacity: 0.65,
-              }}
-            />
-          ))}
+          {/* The "key information" band is about lesson content, not the
+              student's attention. It competes with the attention colours at
+              this size, so the collapsed bar shows attention only and the
+              blue band is left to the Details panel, where the legend
+              explains it. */}
+          {bands
+            .filter((segment) => segment.band !== "key")
+            .map((segment, i) => (
+              <div
+                key={i}
+                className="absolute top-0 bottom-0"
+                style={{
+                  left: `${(segment.start / duration) * 100}%`,
+                  width: `${((segment.end - segment.start) / duration) * 100}%`,
+                  backgroundColor: BAND_COLOR[segment.band],
+                  opacity: 0.65,
+                }}
+              />
+            ))}
 
           {/* Current playhead line */}
           <div

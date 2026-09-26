@@ -14,7 +14,7 @@
  */
 
 import { pipeline, type TextGenerationPipeline } from "@huggingface/transformers";
-import { matchSourceSentence, splitSentences } from "./verify";
+import { matchSourceSentence, selectCandidates, splitSentences } from "./verify";
 
 /**
  * SmolLM2-360M picks a sentence reliably (6/6 on the demo transcript).
@@ -23,10 +23,23 @@ import { matchSourceSentence, splitSentences } from "./verify";
  */
 const MODEL_ID = "HuggingFaceTB/SmolLM2-360M-Instruct";
 
-const SYSTEM_PROMPT = `You pick the most important sentence from a lesson passage.
+/**
+ * The model has exactly one job and an opinion about how to do it.
+ *
+ * Giving it a reason to prefer one sentence over another ("what does this
+ * student need to follow what comes next?") produces markedly better picks
+ * than "most important" alone, which tends to select whichever sentence is
+ * longest. The output contract is unchanged: one sentence, verbatim.
+ */
+const SYSTEM_PROMPT = `A Deaf student looked away and missed part of a lesson. You choose the one line that gets them back on track.
+
+From the numbered sentences, pick the SINGLE sentence that best explains what they need in order to follow what comes next.
+
+Prefer a sentence that defines a term, states a cause or a result, or carries the main point.
+Pass over greetings, admin, asides, repetition and filler.
 
 Reply with that sentence copied EXACTLY as it appears, word for word.
-Do not rewrite it. Do not explain. Reply with nothing but the sentence.`;
+Do not rewrite it. Do not explain your choice. Reply with nothing but the sentence.`;
 
 const MAX_PASSAGE_CHARS = 1500;
 const MAX_NEW_TOKENS = 90;
@@ -86,12 +99,20 @@ self.addEventListener("message", async (event: MessageEvent) => {
 
     if (data.type === "highlight") {
       const passage = (data.passage ?? "").slice(0, MAX_PASSAGE_CHARS);
-      const sentences = splitSentences(passage);
+      // Housekeeping is filtered out here rather than asked for in the
+      // prompt, which this model size does not reliably honour.
+      const sentences = selectCandidates(splitSentences(passage));
 
-      // Nothing to choose between — the deterministic summary already
-      // shows this text, so there is no value in asking the model.
-      if (sentences.length < 2) {
+      if (sentences.length === 0) {
         self.postMessage({ type: "result", id: data.id, text: null });
+        return;
+      }
+
+      // Filtering left exactly one teaching sentence, so there is nothing
+      // to choose between. Return it without spinning up the model — it is
+      // verbatim source text by construction.
+      if (sentences.length === 1) {
+        self.postMessage({ type: "result", id: data.id, text: sentences[0] });
         return;
       }
 

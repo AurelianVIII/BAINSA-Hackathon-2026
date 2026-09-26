@@ -214,7 +214,7 @@ export function AiSummaryPanel({
         {onDevice && (
           <div className="mt-3 rounded-lg border-l-2 border-zinc-900 bg-zinc-50 py-2 pl-3 pr-2 dark:border-zinc-100 dark:bg-zinc-950/60">
             <span className="text-[10px] font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-              Key point · picked on-device
+              The line to catch up on · chosen on-device
             </span>
             <p className="mt-0.5 text-sm leading-relaxed text-zinc-800 dark:text-zinc-100">
               {onDevice.text}
@@ -227,7 +227,7 @@ export function AiSummaryPanel({
             aria-live="polite"
             className="mt-2 text-xs text-zinc-400 dark:text-zinc-500"
           >
-            Finding the key point on-device…
+            Picking the line to catch up on…
           </p>
         )}
 

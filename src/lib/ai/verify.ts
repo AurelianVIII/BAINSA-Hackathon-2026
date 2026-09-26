@@ -78,3 +78,56 @@ export function matchSourceSentence(
   // trailing commentary after the sentence looks like.
   return sentences.find((s) => cleaned.includes(normalise(s))) ?? null;
 }
+
+/**
+ * Lesson logistics rather than lesson content.
+ *
+ * Telling the model to "pass over admin and filler" did not work: asked to
+ * choose from a passage mixing housekeeping with real teaching, SmolLM2-360M
+ * picked "I'll put the slides up on the portal later" and "Let me just find
+ * the right slide, bear with me" over the sentence that actually defined the
+ * topic. A 360M model does not reliably apply selection criteria.
+ *
+ * So the criteria are applied here instead, before it ever sees the list.
+ * Getting this wrong only means a line is not offered as the catch-up line;
+ * it can never put words in the teacher's mouth, so a keyword rule is a
+ * fair trade here in a way it would not be for generated text.
+ */
+const LOGISTICS_PATTERNS: RegExp[] = [
+  // Housekeeping about the course rather than the subject.
+  /\b(slides?|portal|handout|worksheet|homework|assignment|deadline|exam|revision|recording|uploaded?|syllabus|attendance|register)\b/i,
+  // Scheduling.
+  /\b(next|last)\s+(week|lesson|class|time)\b/i,
+  /\b(after|before)\s+(the\s+)?(break|lunch|bell)\b/i,
+  // Pure discourse management.
+  /\b(bear with me|where were we|moving on|let me just|hang on|one second|hold on)\b/i,
+  /\b(welcome back|good morning|good afternoon|hope you had|see you (next|then))\b/i,
+];
+
+/**
+ * First person plus future tense is almost always an announcement about
+ * the course rather than a point about the subject.
+ *
+ * The word boundaries matter: without them the `ll` alternative matches
+ * inside ordinary words, every sentence is classed as logistics, and the
+ * filter silently falls back to offering everything.
+ */
+const ANNOUNCEMENT = /\b(i|we)\s*(?:'ll|\swill\b|\sshall\b)/i;
+
+export function isLogisticsSentence(sentence: string): boolean {
+  if (ANNOUNCEMENT.test(sentence)) return true;
+  return LOGISTICS_PATTERNS.some((pattern) => pattern.test(sentence));
+}
+
+/**
+ * The sentences worth offering as a catch-up line: lesson content only.
+ *
+ * One survivor is a result, not a failure — if a passage holds exactly one
+ * teaching sentence among the housekeeping, that sentence is the answer.
+ * Only a passage that is entirely logistics falls back to the full list,
+ * so something is still offered rather than silence.
+ */
+export function selectCandidates(sentences: string[]): string[] {
+  const content = sentences.filter((s) => !isLogisticsSentence(s));
+  return content.length > 0 ? content : sentences;
+}

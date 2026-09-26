@@ -250,116 +250,177 @@ export function synthesizePassage(
 }
 
 /**
- * Extracts authentic conceptual flowchart nodes.
- * ONLY draws diagrams when genuine multi-step pipelines or comparisons exist.
- * Returns empty nodes if the passage is conversational, avoiding broken text boxes.
+ * Connectives that mark one stage of a process leading to the next.
+ *
+ * The diagram is built from these, in the order they appear, so its shape
+ * comes from how the teacher actually linked the ideas rather than from a
+ * topic we guessed.
+ */
+const FLOW_MARKERS = [
+  "which then produces",
+  "which produces",
+  "which creates",
+  "which gives",
+  "which forms",
+  "which becomes",
+  "resulting in",
+  "results in",
+  "leading to",
+  "leads to",
+  "turns into",
+  "turning into",
+  "to produce",
+  "to create",
+  "to form",
+  "to build",
+  "so that",
+  "and then",
+  "after that",
+  "yields",
+  "generates",
+  "produces",
+  "creates",
+  "becomes",
+  "then",
+  "next,",
+  "finally,",
+];
+
+/** Words that carry no meaning at the start of a stage label. */
+const LABEL_LEAD_STOPWORDS = new Set([
+  "the", "a", "an", "this", "that", "these", "those", "it", "its", "we", "you",
+  "they", "he", "she", "and", "but", "so", "then", "next", "finally", "also",
+  "now", "here", "there", "is", "are", "was", "were", "be", "been", "in", "on",
+  "at", "of", "to", "for", "with", "by", "from", "as", "when", "while", "our",
+]);
+
+const MAX_LABEL_WORDS = 6;
+/** A clause no longer than this is kept whole rather than cut short. */
+const WHOLE_CLAUSE_WORDS = 8;
+const MAX_FLOW_NODES = 4;
+
+/** Words that leave a label dangling if it ends on them. */
+const LABEL_TAIL_STOPWORDS = new Set([
+  "the", "a", "an", "and", "or", "of", "in", "on", "at", "to", "for", "with",
+  "by", "from", "as", "that", "which", "into", "is", "are", "was", "were",
+  "this", "its", "their", "his", "her", "our", "your", "it", "but", "so",
+]);
+
+/**
+ * Turns one clause into a short label built only from its own words.
+ *
+ * Returns null when there is not enough left to label honestly — a
+ * one-word or dangling box is worse than no diagram at all.
+ */
+function toStageLabel(clause: string): string | null {
+  const words = clause
+    .replace(/[^\p{L}\p{N}\s₂+/-]/gu, " ")
+    .split(/\s+/)
+    .filter(Boolean);
+
+  let start = 0;
+  while (start < words.length && LABEL_LEAD_STOPWORDS.has(words[start].toLowerCase())) {
+    start++;
+  }
+
+  const body = words.slice(start);
+  // Short clauses read better whole than clipped at the word limit.
+  const kept =
+    body.length <= WHOLE_CLAUSE_WORDS ? body : body.slice(0, MAX_LABEL_WORDS);
+
+  // Never end on a preposition or article — that is what made the old
+  // boxes read as cut-off fragments.
+  let end = kept.length;
+  while (end > 0 && LABEL_TAIL_STOPWORDS.has(kept[end - 1].toLowerCase())) end--;
+
+  const label = kept.slice(0, end);
+  if (label.length < 2) return null;
+
+  const text = label.join(" ");
+  return text.charAt(0).toUpperCase() + text.slice(1);
+}
+
+/**
+ * Derives a flowchart from the passage's own wording.
+ *
+ * The previous version matched a handful of keywords onto fixed labels —
+ * "convert"/"produce"/"react" anywhere in a passage drew
+ * "Sunlight & Water -> Light Reactions -> ATP, NADPH & O2". A lesson on the
+ * water cycle, rusting, or an engine would have been given a photosynthesis
+ * diagram, and the student it was drawn for is the one person who cannot
+ * check it against what was said.
+ *
+ * Now every box is text the teacher actually used, and a diagram is drawn
+ * only where the passage genuinely chains stages together. No match means
+ * no diagram.
  */
 export function extractConceptualFlow(
   sentences: string[],
   topicTitle?: string
 ): { nodes: SummaryFlowNode[]; edges: SummaryFlowEdge[] } {
-  const fullText = (sentences.join(" ") + " " + (topicTitle ?? "")).toLowerCase();
+  void topicTitle;
+  const empty = { nodes: [] as SummaryFlowNode[], edges: [] as SummaryFlowEdge[] };
 
-  // Pattern 1: Game Dev / Tech Comparison (Scratch vs Engine)
-  if (
-    (fullText.includes("unreal") || fullText.includes("engine")) &&
-    (fullText.includes("html") || fullText.includes("javascript") || fullText.includes("scratch"))
-  ) {
-    const nodes: SummaryFlowNode[] = [
-      { id: "flow-input", label: "HTML & JavaScript (Scratch)", kind: "input" },
-      { id: "flow-process", label: "Multi-Turn AI Prompting", kind: "process" },
-      { id: "flow-output", label: "Unreal Engine 5 Build", kind: "output" },
-    ];
-    const edges: SummaryFlowEdge[] = [
-      { from: "flow-input", to: "flow-process", label: "iterates" },
-      { from: "flow-process", to: "flow-output", label: "compares with" },
-    ];
-    return { nodes, edges };
-  }
+  // Work sentence by sentence: a chain that runs across a full stop is
+  // usually two separate ideas, not one process.
+  for (const sentence of sentences) {
+    const lower = sentence.toLowerCase();
 
-  // Pattern 2: Chemical / Biological Reactions (Reactants -> Reaction -> Products)
-  const converts =
-    fullText.includes("convert") ||
-    fullText.includes("react") ||
-    fullText.includes("produce") ||
-    fullText.includes("photosynthesis") ||
-    fullText.includes("split water");
-
-  if (converts) {
-    let inputLabel = "Starting Reactants";
-    let processLabel = "Chemical Reaction";
-    let outputLabel = "Final Products";
-
-    if (fullText.includes("light") || fullText.includes("water") || fullText.includes("sun")) {
-      inputLabel = "Sunlight & Water";
-      processLabel = "Light Reactions";
-      outputLabel = "ATP, NADPH & O₂";
-    } else if (fullText.includes("hydrogen") || fullText.includes("oxygen")) {
-      inputLabel = "2H₂ + O₂ (Reactants)";
-      processLabel = "Combination Reaction";
-      outputLabel = "2H₂O (Water)";
-    } else if (fullText.includes("calvin") || fullText.includes("co2")) {
-      inputLabel = "CO₂ + ATP / NADPH";
-      processLabel = "Calvin Cycle";
-      outputLabel = "G3P & Glucose";
+    // Find the connectives present, in the order they appear.
+    const hits: { index: number; marker: string }[] = [];
+    let cursor = 0;
+    while (cursor < lower.length) {
+      let best: { index: number; marker: string } | null = null;
+      for (const marker of FLOW_MARKERS) {
+        const at = lower.indexOf(marker, cursor);
+        if (at === -1) continue;
+        if (!best || at < best.index) best = { index: at, marker };
+      }
+      if (!best) break;
+      hits.push(best);
+      cursor = best.index + best.marker.length;
     }
 
-    const nodes: SummaryFlowNode[] = [
-      { id: "flow-input", label: inputLabel, kind: "input" },
-      { id: "flow-process", label: processLabel, kind: "process" },
-      { id: "flow-output", label: outputLabel, kind: "output" },
-    ];
+    if (hits.length === 0) continue;
 
-    const edges: SummaryFlowEdge[] = [
-      { from: "flow-input", to: "flow-process", label: "reacts" },
-      { from: "flow-process", to: "flow-output", label: "yields" },
-    ];
+    // Split the sentence on those connectives; the pieces are the stages.
+    const clauses: string[] = [];
+    let from = 0;
+    for (const hit of hits) {
+      clauses.push(sentence.slice(from, hit.index));
+      from = hit.index + hit.marker.length;
+    }
+    clauses.push(sentence.slice(from));
 
-    return { nodes, edges };
-  }
+    const labels: string[] = [];
+    for (const clause of clauses) {
+      const label = toStageLabel(clause);
+      // A stage we cannot label from its own words breaks the chain.
+      if (!label) break;
+      labels.push(label);
+      if (labels.length === MAX_FLOW_NODES) break;
+    }
 
-  // Pattern 3: Mathematical / Procedural Derivations
-  const isMath =
-    fullText.includes("solve") ||
-    fullText.includes("formula") ||
-    fullText.includes("quadratic") ||
-    fullText.includes("derivative") ||
-    fullText.includes("calculate");
+    if (labels.length < 2) continue;
 
-  if (isMath) {
-    const inputLabel = fullText.includes("quadratic")
-      ? "Identify a, b, c Terms"
-      : fullText.includes("derivative")
-        ? "Given Function f(x)"
-        : "Initial Equation";
+    const nodes: SummaryFlowNode[] = labels.map((label, i) => ({
+      id: `stage-${i + 1}`,
+      label,
+      kind: i === 0 ? "input" : i === labels.length - 1 ? "output" : "process",
+    }));
 
-    const processLabel = fullText.includes("quadratic")
-      ? "Apply Quadratic Formula"
-      : fullText.includes("derivative")
-        ? "Differentiation Rule"
-        : "Algebraic Operations";
-
-    const outputLabel = fullText.includes("quadratic")
-      ? "Calculated Roots (x)"
-      : "Derived Result";
-
-    const nodes: SummaryFlowNode[] = [
-      { id: "step-1", label: inputLabel, kind: "input" },
-      { id: "step-2", label: processLabel, kind: "process" },
-      { id: "step-3", label: outputLabel, kind: "output" },
-    ];
-
-    const edges: SummaryFlowEdge[] = [
-      { from: "step-1", to: "step-2", label: "substitute" },
-      { from: "step-2", to: "step-3", label: "evaluate" },
-    ];
+    const edges: SummaryFlowEdge[] = labels.slice(1).map((_, i) => ({
+      from: `stage-${i + 1}`,
+      to: `stage-${i + 2}`,
+      // The teacher's own connective, tidied, so the arrow says what they
+      // said rather than a generic "leads to".
+      label: hits[i]?.marker.replace(/,$/, "").trim(),
+    }));
 
     return { nodes, edges };
   }
 
-  // If no authentic multi-stage pipeline exists, return NO diagram
-  // rather than rendering broken, cut-off sentence fragments.
-  return { nodes: [], edges: [] };
+  return empty;
 }
 
 /**
