@@ -167,135 +167,144 @@ export function inferTopicTitle(
 }
 
 /**
- * Performs true abstractive synthesis: transforms raw first-person YouTuber speech
- * into third-person, concise educational explanations (NO verbatim snippets).
+ * Performs intelligent extractive summarization: selects the most
+ * content-rich sentences from the transcript and presents them in
+ * clean third-person educational prose.
+ *
+ * Domain-specific openers are used when a known topic is detected,
+ * but the rest of the summary always draws from the actual transcript
+ * so it stays specific to what was said, not canned.
  */
 export function synthesizePassage(
   rawText: string,
   lessonTitle?: string
 ): string {
   const clean = cleanSpeechText(rawText);
-  const lower = (clean + " " + (lessonTitle ?? "")).toLowerCase();
-
-  // Domain 1: Game Development / AI Coding (e.g. Fortnite, Unreal Engine, HTML/JS, AI generation)
-  if (
-    (lower.includes("unreal") || lower.includes("fortnite") || lower.includes("game")) &&
-    (lower.includes("html") || lower.includes("javascript") || lower.includes("scratch") || lower.includes("gpt") || lower.includes("engine"))
-  ) {
-    const aiModel = lower.includes("chatgpt")
-      ? "ChatGPT"
-      : lower.includes("gpt-4")
-        ? "GPT-4"
-        : lower.includes("gpt-5")
-          ? "GPT-5"
-          : lower.includes("gpt") || lower.includes("gbt")
-            ? "AI models"
-            : "AI";
-    const env1 = lower.includes("html") || lower.includes("javascript") ? "from scratch using HTML and JavaScript" : "from scratch";
-    const env2 = lower.includes("unreal") ? "inside Unreal Engine 5" : "a full game engine";
-
-    const part1 = `The presenter explores building Fortnite across two approaches using ${aiModel}: first ${env1}, and then developing ${env2}.`;
-    const part2 = lower.includes("iterate") || lower.includes("prompt")
-      ? "Rather than using single-prompt generation, the workflow employs iterative multi-turn prompting to progressively generate code, refine mechanics, and build upon previous project assets."
-      : "The demonstration compares implementation complexity and visual fidelity between both environments.";
-
-    return `${part1} ${part2}`;
+  if (!clean || clean.split(/\s+/).length < 4) {
+    return "The instructor presented core concepts and instructional steps during this segment.";
   }
 
-  // Domain 2: Biology / Photosynthesis / Cellular energy
-  if (lower.includes("photosynthesis") || lower.includes("calvin") || lower.includes("chloroplast") || lower.includes("light-dependent")) {
-    if (lower.includes("calvin") || lower.includes("light-independent")) {
-      return "The lesson covers the Calvin cycle, where the plant takes carbon dioxide from the air and uses ATP and NADPH from the first stage to synthesize glucose. This reaction occurs in the stroma and represents the food-building phase.";
-    }
-    if (lower.includes("water") || lower.includes("sunlight") || lower.includes("split")) {
-      return "The teacher explains the light-dependent reactions of photosynthesis. Chlorophyll absorbs sunlight to split water molecules, releasing oxygen as a byproduct while charging ATP and NADPH as energy carriers for the cell.";
-    }
-    return "Photosynthesis operates in two coupled stages: light-dependent reactions capture solar energy to produce ATP and NADPH, and the Calvin cycle uses that energy with carbon dioxide to synthesize glucose.";
-  }
-
-  // Domain 3: Chemistry / Reactions / Equations
-  if (lower.includes("equation") || lower.includes("reaction") || lower.includes("balance") || lower.includes("reactant")) {
-    if (lower.includes("hydrogen") && lower.includes("oxygen")) {
-      return "The instructor demonstrates balancing chemical equations using the reaction between hydrogen gas and oxygen gas to produce water. The process ensures the number of atoms for each element is conserved on both sides.";
-    }
-    return "The instructor walks through balancing chemical equations step by step. Coefficients are adjusted to balance atoms across reactants and products while obeying the law of conservation of mass.";
-  }
-
-  // Domain 4: Math / Algebra / Calculus
-  if (lower.includes("quadratic") || lower.includes("formula") || lower.includes("derivative") || lower.includes("integral") || lower.includes("solve")) {
-    if (lower.includes("quadratic")) {
-      return "The lesson introduces the quadratic formula for solving second-degree polynomial equations. The instructor explains how to identify coefficients a, b, and c to calculate both possible roots systematically.";
-    }
-    if (lower.includes("derivative")) {
-      return "The lesson explores finding derivatives, defining rate of change and applying differentiation rules to analyze function behavior at any given point.";
-    }
-    return "The lesson demonstrates step-by-step problem-solving, breaking down the equation into identified components and applying the appropriate algebraic rules to reach the solution.";
-  }
-
-  // Domain 5: Computer Science & Programming Fundamentals (e.g. CS50, C, Python, Scratch, Code, Algorithms)
-  if (
-    lower.includes("cs50") ||
-    lower.includes("programming") ||
-    lower.includes("computer science") ||
-    (lower.includes("scratch") && (lower.includes("syntax") || lower.includes("puzzle") || lower.includes("language") || lower.includes("c ") || lower.includes("week"))) ||
-    ((lower.includes("function") || lower.includes("variable") || lower.includes("loop") || lower.includes("compiler")) && (lower.includes("code") || lower.includes("program")))
-  ) {
-    if (lower.includes("scratch") && (lower.includes("c ") || lower.includes("syntax") || lower.includes("week") || lower.includes("c,"))) {
-      return "The lecture transitions from visual programming in Scratch to procedural programming in C. The instructor emphasizes that while the syntax looks different and more rigorous, the underlying computational constructs—variables, functions, conditionals, and loops—remain fundamentally identical.";
-    }
-    if (lower.includes("compile") || lower.includes("clang") || lower.includes("source code") || lower.includes("machine code")) {
-      return "The instructor explains the compilation process, converting human-readable source code into binary machine code that the CPU can execute. Compilers enforce type safety and identify syntax errors before runtime.";
-    }
-    return "The instructor introduces core computational constructs including variables, control flow, functions, and data structures. The lesson emphasizes procedural logic and building a systematic mental model for problem-solving in code.";
-  }
-
-  // Domain 6: General Educational / Technical - Systematic Third-Person Synthesis
   const sentences = segmentSpeechIntoSentences(clean);
   if (sentences.length === 0) {
     return "The instructor presented core concepts and instructional steps during this segment.";
   }
 
-  const synthesized = sentences
-    .filter((s) => {
-      const l = s.toLowerCase();
-      // Drop pure conversational opening banter from being chosen as the main summary
-      return (
-        !l.startsWith("all right, this is cs 50") &&
-        !l.includes("second week together") &&
-        !l.includes("down the road has a tradition") &&
-        !l.includes("feels like a bit of a fire hose")
-      );
-    })
-    .slice(0, 3)
-    .map((s) => {
-      let t = s;
-      // Strip conversational lead-ins
-      t = t.replace(/^(all right|okay|so|now|well|and so|and indeed|in fact|you see|remember|recall that|as mentioned|as you know)\b[,:\s]*/gi, "");
-      // Convert speech lead-ins to educational third person
-      t = t.replace(/^(today\s+)?(i'm|i am)\s+(forcing|asking|trying to get)\s+/i, "The presenter tests ");
-      t = t.replace(/^(today\s+)?(i'm|i am)\s+(building|creating|making|coding|implementing)\s+/i, "The lesson demonstrates building ");
-      t = t.replace(/^(today\s+)?(we're|we are)\s+(looking at|learning about|talking about|exploring)\s+/i, "The lesson explores ");
-      t = t.replace(/^(now\s+)?(you guys may have noticed|you can see)\s+that\s+/i, "Notice that ");
-      t = t.replace(/\b(let's see which one is better)\b/i, "the goal is to compare performance across both implementations");
-      t = t.replace(/\binstead of just sending one prompt,?\s+i let it iterate across multiple turns\b/i, "the workflow iterates across multiple AI prompt turns rather than a single prompt");
-      t = t.replace(/\bi decided to build upon it\b/i, "the project expands upon previous implementations");
-      // Subject and verb agreement for third person
-      t = t.replace(/\b(i|we)\s+have\b/gi, "the instructor has");
-      t = t.replace(/\b(i|we)\s+want\s+to\b/gi, "the goal is to");
-      t = t.replace(/\b(i|we)\s+will\b/gi, "the instructor will");
-      t = t.replace(/\b(i|we)\s+can\b/gi, "one can");
-      t = t.replace(/\b(i|we)\s+need\s+to\b/gi, "the next step is to");
-      t = t.replace(/\b(i|we)\s+made\b/gi, "were developed in");
-      t = t.replace(/\b(i|we)\s+got\b/gi, "includes");
-      t = t.replace(/\b(we're|we are)\b/gi, "the lesson is");
-      t = t.replace(/\b(i'm|i am)\b/gi, "the presenter is");
-      t = t.replace(/\b(my|our)\b/gi, "the");
-      t = t.replace(/\b(i|we)\b/gi, "the instructor");
-      return capitalize(t.trim());
-    })
-    .join(" ");
+  // Score sentences by informational density
+  const scored = sentences.map((s) => ({
+    text: s,
+    score: scoreSentence(s),
+  }));
 
-  return synthesized || "The instructor presented key lesson concepts and instructional steps during this segment.";
+  // Sort by score descending, take top 3, then re-sort by original order
+  // to preserve narrative flow
+  const topIndices = scored
+    .map((s, i) => ({ ...s, idx: i }))
+    .sort((a, b) => b.score - a.score)
+    .slice(0, 3)
+    .sort((a, b) => a.idx - b.idx);
+
+  // Clean each sentence: strip first-person lead-ins, normalize
+  const polished = topIndices.map((entry) => polishSentence(entry.text));
+
+  // Build the final summary
+  const lower = (clean + " " + (lessonTitle ?? "")).toLowerCase();
+  const opener = getTopicOpener(lower);
+
+  if (opener && polished.length > 0) {
+    return opener + " " + polished.join(" ");
+  }
+
+  return polished.join(" ") || "The instructor presented key lesson concepts and instructional steps during this segment.";
+}
+
+/** Scores a sentence by content richness: technical terms, length, specificity. */
+function scoreSentence(sentence: string): number {
+  const lower = sentence.toLowerCase();
+  const words = lower.split(/\s+/);
+  let score = 0;
+
+  // Reward longer sentences (up to a point)
+  score += Math.min(words.length, 20) * 0.5;
+
+  // Reward technical / content keywords
+  const CONTENT_WORDS = /\b(algorithm|variable|function|loop|array|string|type|compile|binary|data|code|program|syntax|memory|pointer|error|debug|class|object|method|library|module|process|equation|formula|energy|cell|reaction|molecule|atom|force|velocity|theorem|proof|graph|matrix|vector|structure|database|network|protocol|system|model|analysis|concept|principle|theory|definition|example|step|rule|pattern|result|output|input|condition|parameter|argument|return|value|state|interface)\b/g;
+  const contentMatches = lower.match(CONTENT_WORDS);
+  score += (contentMatches?.length ?? 0) * 2;
+
+  // Reward numbers and specific references
+  if (/\d/.test(sentence)) score += 1.5;
+
+  // Penalise pure conversational / filler sentences
+  const CONVERSATIONAL = /\b(welcome|hello|hey|guys|awesome|amazing|cool|great|perfect|wonderful|excited|fun|love|hate|favorite|favourite|feel|opinion|think about|reminds me)\b/gi;
+  const convMatches = lower.match(CONVERSATIONAL);
+  score -= (convMatches?.length ?? 0) * 3;
+
+  // Penalise very short sentences
+  if (words.length < 6) score -= 3;
+
+  // Penalise sentences that are mostly personal pronouns
+  const pronouns = lower.match(/\b(i|me|my|we|our|you|your)\b/g);
+  if (pronouns && pronouns.length > words.length * 0.3) score -= 2;
+
+  return score;
+}
+
+/** Cleans a single sentence into third-person educational prose. */
+function polishSentence(sentence: string): string {
+  let s = sentence.trim();
+
+  // Strip conversational lead-ins
+  s = s.replace(/^(all right|okay|so|now|well|and so|and indeed|in fact|you see|remember|recall that|as mentioned|as you know|let me|let's)\b[,:\s]*/gi, "");
+
+  // Targeted first→third person replacements (specific patterns only)
+  s = s.replace(/\b(i'm|i am)\s+(going to|gonna)\s+/gi, "The next step is to ");
+  s = s.replace(/\b(i'm|i am)\s+(showing|demonstrating|explaining)\s+/gi, "The lesson demonstrates ");
+  s = s.replace(/\bwe('re| are)\s+(going to|gonna)\s+/gi, "The next step is to ");
+  s = s.replace(/\bwe('re| are)\s+(looking at|learning about|talking about|exploring)\s+/gi, "The lesson covers ");
+  s = s.replace(/\b(i|we)\s+want\s+to\b/gi, "the goal is to");
+  s = s.replace(/\b(i|we)\s+need\s+to\b/gi, "the next step is to");
+  s = s.replace(/\byou\s+can\s+see\b/gi, "notice");
+  s = s.replace(/\byou\s+can\s+think\s+of\b/gi, "consider");
+  s = s.replace(/\bif\s+you\s+look\s+at\b/gi, "looking at");
+  s = s.replace(/\bwhat\s+i('m| am)\s+doing\b/gi, "what happens");
+
+  // Don't do blanket I/we→instructor replacement — it creates broken prose.
+  // Instead, only fix remaining isolated "I " at sentence start.
+  s = s.replace(/^I\s+/, "The instructor ");
+
+  // Ensure proper capitalisation and ending punctuation
+  s = capitalize(s);
+  if (!/[.!?]$/.test(s)) s += ".";
+
+  return s;
+}
+
+/** Returns a brief topic-specific opening line, or null for unknown domains. */
+function getTopicOpener(lower: string): string | null {
+  if (
+    (lower.includes("unreal") || lower.includes("fortnite")) &&
+    (lower.includes("html") || lower.includes("javascript") || lower.includes("engine"))
+  ) {
+    return "The lesson compares building game environments across different platforms.";
+  }
+  if (lower.includes("photosynthesis") || lower.includes("calvin") || lower.includes("chloroplast")) {
+    return "The lesson covers the stages of photosynthesis and cellular energy conversion.";
+  }
+  if ((lower.includes("equation") || lower.includes("reaction")) && (lower.includes("balance") || lower.includes("reactant"))) {
+    return "The lesson walks through balancing chemical equations step by step.";
+  }
+  if (lower.includes("quadratic") || lower.includes("derivative") || lower.includes("integral")) {
+    return "The lesson demonstrates systematic problem-solving in mathematics.";
+  }
+  if (
+    lower.includes("cs50") ||
+    lower.includes("programming") ||
+    lower.includes("computer science") ||
+    (lower.includes("scratch") && (lower.includes("c ") || lower.includes("syntax") || lower.includes("week")))
+  ) {
+    return "The lesson introduces core computational thinking and programming constructs.";
+  }
+  return null;
 }
 
 /**
@@ -475,7 +484,8 @@ export function generateSmartSummary(
 
 /**
  * Generates concise, synthesized bullets and key takeaways for manual catch-up.
- * (NO direct snippets).
+ * Uses extractive summarization: picks the most content-rich sentences from the
+ * actual transcript and presents them as clean, third-person bullet points.
  */
 export function generateSmartCatchUp(
   items: TranscriptItem[],
@@ -484,55 +494,31 @@ export function generateSmartCatchUp(
   lessonTitle?: string
 ): CatchUpResult {
   const summary = generateSmartSummary(items, { start: fromTime, end: toTime }, { lessonTitle });
-  const lower = (summary.text + " " + (lessonTitle ?? "")).toLowerCase();
 
-  let bullets: string[] = [];
-  let keyIdea = "";
+  // Get the raw transcript text for the missed window
+  const rawText = items.map((i) => i.text).join(" ");
+  const allSentences = segmentSpeechIntoSentences(cleanSpeechText(rawText));
 
-  // Domain-specific synthesized bullets
-  if (lower.includes("fortnite") || lower.includes("unreal")) {
-    bullets = [
-      "Comparative Builds: Explores creating Fortnite from scratch in HTML/JS versus Unreal Engine 5.",
-      "Iterative AI Workflow: Leverages multi-turn prompt iteration instead of single-shot prompts.",
-      "Asset Development: Expands upon existing game mechanics, custom skins, and visual features.",
-    ];
-    keyIdea = "Iterative multi-turn prompting enables AI models to construct and refine complex game implementations across web and engine environments.";
-  } else if (lower.includes("photosynthesis") || lower.includes("calvin")) {
-    bullets = [
-      "Energy Capture: Sunlight splits water molecules in the thylakoid to charge ATP and NADPH.",
-      "Oxygen Release: Splitting water produces molecular oxygen as a vital cellular byproduct.",
-      "Sugar Synthesis: The Calvin cycle uses stored chemical energy to fix CO₂ into glucose.",
-    ];
-    keyIdea = "Photosynthesis couples light-dependent energy harvesting with carbon fixation to synthesize cellular sugars.";
-  } else if (lower.includes("equation") || lower.includes("reaction") || lower.includes("balance")) {
-    bullets = [
-      "Conservation of Mass: Ensures the number of atoms for every element matches on both sides.",
-      "Coefficient Adjustment: Balances chemical equations by modifying molecular quantities.",
-      "Reaction Modeling: Verifies reactants transform into balanced products without lost mass.",
-    ];
-    keyIdea = "Chemical equations are balanced by adjusting coefficients so atom counts obey mass conservation.";
-  } else if (lower.includes("quadratic") || lower.includes("derivative") || lower.includes("formula")) {
-    bullets = [
-      "Problem Setup: Identifies key mathematical coefficients and variables within the equation.",
-      "Rule Execution: Applies the standard formula or differentiation technique systematically.",
-      "Solution Verification: Evaluates roots or rates of change to reach the validated result.",
-    ];
-    keyIdea = "Standard formulas provide structured algorithms to solve complex polynomial and calculus problems.";
-  } else if (lower.includes("cs50") || lower.includes("programming") || lower.includes("scratch") || lower.includes("compiler") || lower.includes("syntax")) {
-    bullets = [
-      "Visual to Syntax: Transitions from Scratch's visual block model to text-based C syntax.",
-      "Core Constructs: Reuses fundamental building blocks—functions, variables, loops, and conditions.",
-      "Algorithmic Thinking: Emphasizes problem-solving and logic over memorizing rigid code syntax.",
-    ];
-    keyIdea = "Programming languages may vary in syntax, but fundamental constructs like functions, variables, and loops share the same underlying logic.";
-  } else {
-    const sentences = segmentSpeechIntoSentences(summary.text);
-    bullets = sentences.slice(0, 3).map((s) => {
-      const words = s.split(/\s+/);
-      return words.length > 18 ? words.slice(0, 18).join(" ") + "…" : s;
-    });
-    keyIdea = sentences[0] ?? "Key instructional concepts and steps were presented during this segment.";
-  }
+  // Score and pick the top sentences for bullets
+  const scored = allSentences
+    .map((s, i) => ({ text: s, score: scoreSentence(s), idx: i }))
+    .sort((a, b) => b.score - a.score);
+
+  const topSentences = scored
+    .slice(0, 3)
+    .sort((a, b) => a.idx - b.idx)
+    .map((entry) => polishSentence(entry.text));
+
+  // Build bullets — use polished sentences, truncated if too long
+  const bullets = topSentences.map((s) => {
+    const words = s.split(/\s+/);
+    return words.length > 20 ? words.slice(0, 20).join(" ") + "…" : s;
+  });
+
+  // Key idea is the highest-scored sentence
+  const keyIdea = scored.length > 0
+    ? polishSentence(scored[0].text)
+    : "Key instructional concepts and steps were presented during this segment.";
 
   return {
     title: summary.title,

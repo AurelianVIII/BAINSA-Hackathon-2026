@@ -226,16 +226,49 @@ export function buildLiveTimelineBands(
   transcript: TranscriptItem[],
   duration: number
 ): BandSegment[] {
-  const perSecond: TimelineBand[] = new Array(duration + 1).fill("high");
+  // Only emit band segments for seconds where we have genuine webcam
+  // readings. Seconds without a recording are skipped entirely so the
+  // timeline stays empty (background colour) until real data arrives.
+  const recordedKeys = Object.keys(recordedSamples).map(Number);
+  if (recordedKeys.length === 0) return [];
 
-  for (let t = 0; t <= duration; t++) {
-    const sample = recordedSamples[t];
-    if (!sample) continue;
-    if (sample.gaze < LIVE_GAZE_AWAY_THRESHOLD) perSecond[t] = "away";
-    else if (sample.confusion > LIVE_CONFUSION_THRESHOLD) perSecond[t] = "confused";
+  recordedKeys.sort((a, b) => a - b);
+
+  // Build a sparse per-second map — only observed seconds get a band.
+  const observed = new Map<number, TimelineBand>();
+  for (const t of recordedKeys) {
+    const s = recordedSamples[t];
+    if (s.gaze < LIVE_GAZE_AWAY_THRESHOLD) observed.set(t, "away");
+    else if (s.confusion > LIVE_CONFUSION_THRESHOLD) observed.set(t, "confused");
+    else observed.set(t, "high");
   }
 
-  applyKeyContentBand(perSecond, transcript, duration);
+  // Key-content overlay for observed seconds only
+  for (const item of transcript) {
+    if (item.importance !== "high") continue;
+    const start = Math.max(0, Math.round(item.start));
+    const end = Math.min(duration, Math.round(item.end));
+    for (let t = start; t <= end; t++) {
+      if (observed.has(t)) observed.set(t, "key");
+    }
+  }
 
-  return runLengthEncodeBands(perSecond, duration);
+  // Run-length encode only the observed seconds into contiguous segments.
+  const bands: BandSegment[] = [];
+  let segStart = recordedKeys[0];
+  let segBand = observed.get(segStart)!;
+
+  for (let i = 1; i < recordedKeys.length; i++) {
+    const t = recordedKeys[i];
+    const band = observed.get(t)!;
+    // Flush when band changes or there's a gap in recording
+    if (band !== segBand || t !== recordedKeys[i - 1] + 1) {
+      bands.push({ band: segBand, start: segStart, end: recordedKeys[i - 1] + 1 });
+      segStart = t;
+      segBand = band;
+    }
+  }
+  bands.push({ band: segBand, start: segStart, end: recordedKeys[recordedKeys.length - 1] + 1 });
+
+  return bands;
 }
