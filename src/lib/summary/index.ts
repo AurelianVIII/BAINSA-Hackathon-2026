@@ -27,22 +27,21 @@ export function groupByTopic(
  */
 const FULL_NODES: SummaryFlowNode[] = [
   { id: "sun", label: "Sunlight", kind: "input" },
-  { id: "water", label: "Water (H₂O)", kind: "input" },
   { id: "light", label: "Light-dependent reactions", kind: "process" },
-  { id: "oxygen", label: "Oxygen (O₂)", kind: "output" },
   { id: "atp", label: "ATP + NADPH", kind: "process" },
-  { id: "co2", label: "Carbon dioxide (CO₂)", kind: "input" },
   { id: "calvin", label: "Calvin cycle", kind: "process" },
   { id: "glucose", label: "Glucose", kind: "output" },
 ];
 
+/**
+ * Secondary molecules ride on the edges rather than becoming boxes — it
+ * keeps the chain readable in a narrow panel and still shows what enters
+ * and leaves at each step.
+ */
 const FULL_EDGES: SummaryFlowEdge[] = [
-  { from: "sun", to: "light" },
-  { from: "water", to: "light" },
-  { from: "light", to: "oxygen", label: "released" },
-  { from: "light", to: "atp" },
-  { from: "atp", to: "calvin", label: "energy" },
-  { from: "co2", to: "calvin" },
+  { from: "sun", to: "light", label: "+ water" },
+  { from: "light", to: "atp", label: "releases O₂" },
+  { from: "atp", to: "calvin", label: "+ CO₂" },
   { from: "calvin", to: "glucose" },
 ];
 
@@ -52,10 +51,10 @@ const FULL_EDGES: SummaryFlowEdge[] = [
  * an empty box.
  */
 const TOPIC_NODE_IDS: Record<string, string[]> = {
-  "Calvin Cycle": ["light", "atp", "co2", "calvin", "glucose"],
-  "Light-Dependent Reactions": ["sun", "water", "light", "oxygen", "atp"],
+  "Calvin Cycle": ["light", "atp", "calvin", "glucose"],
+  "Light-Dependent Reactions": ["sun", "light", "atp"],
   "ATP and NADPH": ["light", "atp", "calvin"],
-  "Glucose Production": ["atp", "co2", "calvin", "glucose"],
+  "Glucose Production": ["atp", "calvin", "glucose"],
 };
 
 /**

@@ -77,7 +77,7 @@ export function AiSummaryPanel({ request }: { request: MissedWindow | null }) {
         {data.text}
       </p>
 
-      <div className="mt-4 rounded-lg border border-zinc-100 bg-zinc-50/60 p-2 dark:border-zinc-800 dark:bg-zinc-950/40">
+      <div className="mt-4 rounded-lg border border-zinc-100 bg-zinc-50/60 p-3 dark:border-zinc-800 dark:bg-zinc-950/40">
         <SummaryFlowchart data={data} />
       </div>
     </Card>

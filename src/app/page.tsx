@@ -7,8 +7,9 @@ import { TranscriptPanel } from "@/components/transcript/TranscriptPanel";
 import { CatchUpButton } from "@/components/catchup/CatchUpButton";
 import { AttentionTracker } from "@/components/attention/AttentionTracker";
 import { AttentionTimeline } from "@/components/attention/AttentionTimeline";
-import { VisualSummary } from "@/components/summary/VisualSummary";
-import { TopicThreads } from "@/components/threads/TopicThreads";
+import { AiSummaryPanel } from "@/components/summary/AiSummaryPanel";
+import { KeyMoments } from "@/components/threads/KeyMoments";
+import type { MissedWindow } from "@/lib/summary/types";
 import { transcript } from "@/data/transcript";
 import { attentionEvents } from "@/data/attention-events";
 import { attentionSamples } from "@/data/attention-samples";
@@ -24,6 +25,9 @@ const LESSON_DURATION = 300;
 export default function Home() {
   const [currentTime, setCurrentTime] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
+  /** The missed window the AI summary panel is currently explaining.
+   *  PC2's alert will set this too, via onShowSummary. */
+  const [summaryRequest, setSummaryRequest] = useState<MissedWindow | null>(null);
 
   useEffect(() => {
     if (!isPlaying) return;
@@ -72,8 +76,13 @@ export default function Home() {
               level={attentionLevel}
             />
             <CatchUpButton currentTime={currentTime} />
-            <VisualSummary />
-            <TopicThreads />
+            <AiSummaryPanel request={summaryRequest} />
+            <KeyMoments
+              items={transcript}
+              currentTime={currentTime}
+              onSeek={setCurrentTime}
+              onRequestSummary={setSummaryRequest}
+            />
           </div>
         </div>
         <AttentionTimeline

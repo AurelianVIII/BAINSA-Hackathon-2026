@@ -1,38 +1,43 @@
+import type { SummaryFlowNode } from "./types";
+
 /**
  * Owned by the Summaries/Threads feature team (PC4).
  *
- * Hand-placed coordinates for the summary flowchart. Eight nodes do not
- * need a layout algorithm, and hand-placing them reads better than
- * anything generated. Coordinates are box centres inside the SVG viewBox.
- *
- * The main reaction chain runs straight along y=120; side inputs sit
- * above it and the oxygen byproduct below, so every edge stays short.
+ * The diagram is a single vertical chain, which is what the design calls
+ * for — sun, light-dependent reactions, ATP/NADPH, Calvin cycle, glucose.
+ * Secondary molecules (water, oxygen, CO₂) ride on the edges as labels
+ * rather than becoming boxes, which keeps the chart legible in a narrow
+ * side panel instead of needing a wide one.
  */
 
-export const VIEW_W = 720;
-export const VIEW_H = 240;
-export const NODE_W = 120;
-export const NODE_H = 54;
+export const VIEW_W = 320;
+export const NODE_W = 244;
+export const NODE_H = 56;
+export const ROW_GAP = 104;
+const TOP_PAD = 34;
 
-export const NODE_POS: Record<string, { x: number; y: number }> = {
-  sun: { x: 60, y: 120 },
-  water: { x: 60, y: 40 },
-  light: { x: 210, y: 120 },
-  oxygen: { x: 360, y: 200 },
-  atp: { x: 360, y: 120 },
-  co2: { x: 510, y: 40 },
-  calvin: { x: 510, y: 120 },
-  glucose: { x: 660, y: 120 },
-};
+/** Fixed reaction order. Anything unknown sorts to the end. */
+const CHAIN_ORDER = ["sun", "light", "atp", "calvin", "glucose"];
 
-/**
- * Position lookup with a fallback, so an unknown node id — e.g. one
- * invented by the AI path — lays out in a readable row instead of
- * collapsing onto 0,0.
- */
-export function positionFor(
-  id: string,
-  index: number
-): { x: number; y: number } {
-  return NODE_POS[id] ?? { x: 60 + index * 150, y: 120 };
+function chainIndex(id: string) {
+  const i = CHAIN_ORDER.indexOf(id);
+  return i === -1 ? CHAIN_ORDER.length : i;
+}
+
+export function layoutChain(nodes: SummaryFlowNode[]) {
+  const ordered = [...nodes].sort(
+    (a, b) => chainIndex(a.id) - chainIndex(b.id)
+  );
+
+  const positions = new Map(
+    ordered.map((node, i) => [
+      node.id,
+      { x: VIEW_W / 2, y: TOP_PAD + NODE_H / 2 + i * ROW_GAP },
+    ])
+  );
+
+  const viewH =
+    TOP_PAD * 2 + NODE_H + Math.max(0, ordered.length - 1) * ROW_GAP;
+
+  return { ordered, positions, viewH };
 }
