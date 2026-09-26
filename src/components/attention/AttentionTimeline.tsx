@@ -9,7 +9,7 @@ const BAND_COLOR: Record<TimelineBand, string> = {
   recovered: "#10b981",
   away: "#f43f5e",
   confused: "#f59e0b",
-  key: "#8b5cf6",
+  key: "#3b82f6",
 };
 
 const LEGEND: { band: TimelineBand; label: string }[] = [
@@ -100,7 +100,7 @@ export function AttentionTimeline({
         aria-valuenow={Math.round(currentTime)}
         aria-valuetext={formatTime(currentTime)}
         tabIndex={0}
-        className="relative cursor-pointer select-none touch-none rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500"
+        className="relative cursor-pointer select-none touch-none rounded-lg focus:outline-none focus-visible:ring-2 focus-visible:ring-zinc-500"
         onPointerDown={(e) => {
           setIsDragging(true);
           const time = timeFromClientX(e.clientX);

@@ -72,7 +72,7 @@ export function CatchUpButton({
       <button
         onClick={handleClick}
         disabled={isLoading}
-        className="w-full rounded-lg bg-indigo-600 px-3 py-2 text-sm font-medium text-white hover:bg-indigo-500 disabled:opacity-60"
+        className="w-full rounded-lg bg-zinc-900 px-3 py-2 text-sm font-medium text-white hover:bg-zinc-700 disabled:opacity-60 dark:bg-zinc-100 dark:text-zinc-900 dark:hover:bg-zinc-300"
       >
         {isLoading ? "Thinking…" : "What did I miss?"}
       </button>

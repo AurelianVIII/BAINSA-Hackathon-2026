@@ -122,7 +122,7 @@ export function AiSummaryPanel({ request }: { request: MissedWindow | null }) {
       title={
         <span className="flex items-center justify-between gap-2">
           <span>AI Summary of the missed part</span>
-          <span className="flex items-center gap-1 rounded-full bg-indigo-50 px-2 py-0.5 text-[10px] font-medium normal-case text-indigo-700 dark:bg-indigo-950 dark:text-indigo-300">
+          <span className="flex items-center gap-1 rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-medium normal-case text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300">
             <SparkleIcon />
             AI
           </span>

@@ -42,7 +42,7 @@ export function VisualSummaryTab({
               onClick={() => onSeek(start)}
               className={`w-full rounded-lg border p-3 text-left transition-colors ${
                 isActive
-                  ? "border-indigo-200 bg-indigo-50 dark:border-indigo-800 dark:bg-indigo-950"
+                  ? "border-zinc-300 bg-zinc-100 dark:border-zinc-700 dark:bg-zinc-800"
                   : "border-zinc-200 hover:bg-zinc-50 dark:border-zinc-800 dark:hover:bg-zinc-800"
               }`}
             >

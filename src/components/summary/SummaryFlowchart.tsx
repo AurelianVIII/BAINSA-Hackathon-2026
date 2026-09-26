@@ -8,7 +8,7 @@ import type { VisualSummaryData } from "@/lib/summary/types";
 
 const KIND_CLASS: Record<string, string> = {
   input: "fill-amber-50 stroke-amber-400 dark:fill-amber-950/50",
-  process: "fill-indigo-50 stroke-indigo-400 dark:fill-indigo-950/50",
+  process: "fill-zinc-100 stroke-zinc-400 dark:fill-zinc-800/50",
   output: "fill-emerald-50 stroke-emerald-400 dark:fill-emerald-950/50",
 };
 

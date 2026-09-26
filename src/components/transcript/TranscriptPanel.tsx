@@ -45,14 +45,8 @@ export function TranscriptPanel({
   currentTime,
   onSeek,
   missedIds,
-  isTranscribing,
   isLiveLesson,
-  transcriptionSupported,
-  transcriptionError,
   interimText,
-  onStartTranscription,
-  onStopTranscription,
-  onUseDemoLesson,
   keyMomentsSlot,
   visualSummarySlot,
 }: {
@@ -60,14 +54,8 @@ export function TranscriptPanel({
   currentTime: number;
   onSeek: (time: number) => void;
   missedIds: string[];
-  isTranscribing: boolean;
   isLiveLesson: boolean;
-  transcriptionSupported: boolean;
-  transcriptionError: string | null;
   interimText: string;
-  onStartTranscription: () => void;
-  onStopTranscription: () => void;
-  onUseDemoLesson: () => void;
   keyMomentsSlot?: ReactNode;
   visualSummarySlot?: ReactNode;
 }) {
@@ -112,9 +100,9 @@ export function TranscriptPanel({
             tabIndex={tab === name ? 0 : -1}
             onClick={() => setTab(name)}
             onKeyDown={(event) => handleTabKeyDown(event, index)}
-            className={`whitespace-nowrap rounded-t-lg px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 ${
+            className={`whitespace-nowrap rounded-t-lg px-3 py-2 text-sm font-medium transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-900 ${
               tab === name
-                ? "border-b-2 border-indigo-600 text-indigo-700 dark:text-indigo-300"
+                ? "border-b-2 border-zinc-900 text-zinc-700 dark:text-zinc-300"
                 : "text-zinc-500 hover:text-zinc-800 dark:text-zinc-400 dark:hover:text-zinc-100"
             }`}
           >
@@ -137,93 +125,12 @@ export function TranscriptPanel({
             missedIds={missedIds}
             isLiveLesson={isLiveLesson}
             interimText={interimText}
-            controls={
-              <LiveControls
-                isTranscribing={isTranscribing}
-                isLiveLesson={isLiveLesson}
-                supported={transcriptionSupported}
-                error={transcriptionError}
-                onStart={onStartTranscription}
-                onStop={onStopTranscription}
-                onUseDemoLesson={onUseDemoLesson}
-              />
-            }
           />
         )}
         {tab === "Key Moments" && <SlotArea>{keyMomentsSlot}</SlotArea>}
         {tab === "Visual Summary" && <SlotArea>{visualSummarySlot}</SlotArea>}
         {tab === "Notes" && <NotesTab currentTime={currentTime} />}
       </div>
-    </div>
-  );
-}
-
-/**
- * Source control for the transcript: the scripted demo lesson, or the
- * microphone transcribing a real one.
- */
-function LiveControls({
-  isTranscribing,
-  isLiveLesson,
-  supported,
-  error,
-  onStart,
-  onStop,
-  onUseDemoLesson,
-}: {
-  isTranscribing: boolean;
-  isLiveLesson: boolean;
-  supported: boolean;
-  error: string | null;
-  onStart: () => void;
-  onStop: () => void;
-  onUseDemoLesson: () => void;
-}) {
-  return (
-    <div className="flex flex-wrap items-center gap-2">
-      {isTranscribing ? (
-        <button
-          type="button"
-          onClick={onStop}
-          className="flex items-center gap-2 rounded-lg bg-rose-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-rose-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
-        >
-          <span
-            aria-hidden
-            className="h-2 w-2 animate-pulse rounded-full bg-white motion-reduce:animate-none"
-          />
-          Stop transcribing
-        </button>
-      ) : (
-        <button
-          type="button"
-          onClick={onStart}
-          disabled={!supported}
-          className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-500 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 disabled:cursor-not-allowed disabled:bg-zinc-300 dark:disabled:bg-zinc-700"
-        >
-          Transcribe this lesson
-        </button>
-      )}
-
-      {isLiveLesson && !isTranscribing && (
-        <button
-          type="button"
-          onClick={onUseDemoLesson}
-          className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
-        >
-          Back to demo lesson
-        </button>
-      )}
-
-      {!supported && (
-        <p className="text-xs text-zinc-500 dark:text-zinc-400">
-          This browser has no speech recognition — try Chrome or Edge.
-        </p>
-      )}
-      {error && (
-        <p role="alert" className="text-xs text-rose-600 dark:text-rose-400">
-          {error}
-        </p>
-      )}
     </div>
   );
 }
@@ -276,7 +183,6 @@ function CaptionList({
   missedIds,
   isLiveLesson,
   interimText,
-  controls,
 }: {
   items: TranscriptItem[];
   currentTime: number;
@@ -284,7 +190,6 @@ function CaptionList({
   missedIds: string[];
   isLiveLesson: boolean;
   interimText: string;
-  controls: ReactNode;
 }) {
   const activeRef = useRef<HTMLLIElement>(null);
   // Auto-scroll follows playback until the user takes over, so the panel
@@ -343,7 +248,6 @@ function CaptionList({
   return (
     <div className="flex h-full flex-col">
       <div className="flex shrink-0 flex-col gap-2 px-3 pt-3">
-        {controls}
         <div className="relative">
           <input
             type="search"
@@ -354,7 +258,7 @@ function CaptionList({
             }}
             placeholder="Search the lesson…"
             aria-label="Search the lesson transcript"
-            className="w-full rounded-lg border border-zinc-200 bg-zinc-50 py-1.5 pl-3 pr-16 text-sm text-zinc-800 placeholder:text-zinc-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+            className="w-full rounded-lg border border-zinc-200 bg-zinc-50 py-1.5 pl-3 pr-16 text-sm text-zinc-800 placeholder:text-zinc-400 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-900 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
           />
           {isSearching && (
             <span className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-xs tabular-nums text-zinc-500 dark:text-zinc-400">
@@ -403,11 +307,11 @@ function CaptionList({
                         ? `${formatTime(item.start)}. Missed while you were away: ${item.text}`
                         : `${formatTime(item.start)}. ${item.text}`
                     }
-                    className={`flex w-full gap-3 rounded-lg border-l-4 px-2.5 py-2 text-left text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 ${
+                    className={`flex w-full gap-3 rounded-lg border-l-4 px-2.5 py-2 text-left text-sm transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-900 ${
                       wasMissed
-                        ? "border-l-purple-500 bg-purple-50 hover:bg-purple-100 dark:bg-purple-950/40 dark:hover:bg-purple-900/40"
+                        ? "border-l-blue-500 bg-blue-50 hover:bg-blue-100 dark:bg-blue-950/40 dark:hover:bg-blue-900/40"
                         : isActive
-                          ? "border-l-indigo-500 bg-indigo-50 dark:bg-indigo-950"
+                          ? "border-l-zinc-500 bg-zinc-100 dark:bg-zinc-800"
                           : "border-l-transparent hover:bg-zinc-50 dark:hover:bg-zinc-800"
                     }`}
                   >
@@ -453,7 +357,7 @@ function CaptionList({
           <button
             type="button"
             onClick={() => setFollowing(true)}
-            className="absolute bottom-3 right-4 rounded-full bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white shadow-lg hover:bg-zinc-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 dark:bg-zinc-100 dark:text-zinc-900"
+            className="absolute bottom-3 right-4 rounded-full bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white shadow-lg hover:bg-zinc-700 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-900 dark:bg-zinc-100 dark:text-zinc-900"
           >
             Follow along
           </button>
@@ -517,7 +421,7 @@ function NotesTab({ currentTime }: { currentTime: number }) {
               `${notes}${notes && !notes.endsWith("\n") ? "\n" : ""}[${formatTime(currentTime)}] `
             )
           }
-          className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
+          className="rounded-lg border border-zinc-300 px-3 py-1.5 text-sm font-medium text-zinc-700 hover:bg-zinc-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-900 dark:border-zinc-700 dark:text-zinc-200 dark:hover:bg-zinc-800"
         >
           Add note at {formatTime(currentTime)}
         </button>
@@ -525,7 +429,7 @@ function NotesTab({ currentTime }: { currentTime: number }) {
           <button
             type="button"
             onClick={() => notesStore.write("")}
-            className="rounded-lg px-2.5 py-1.5 text-sm text-zinc-500 hover:bg-zinc-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 dark:text-zinc-400 dark:hover:bg-zinc-800"
+            className="rounded-lg px-2.5 py-1.5 text-sm text-zinc-500 hover:bg-zinc-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-900 dark:text-zinc-400 dark:hover:bg-zinc-800"
           >
             Clear
           </button>
@@ -539,7 +443,7 @@ function NotesTab({ currentTime }: { currentTime: number }) {
         onChange={(event) => notesStore.write(event.target.value)}
         placeholder="Your notes for this lesson…"
         aria-label="Lesson notes"
-        className="min-h-0 flex-1 resize-none rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-sm text-zinc-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
+        className="min-h-0 flex-1 resize-none rounded-lg border border-zinc-200 bg-zinc-50 p-3 text-sm text-zinc-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-900 dark:border-zinc-700 dark:bg-zinc-800 dark:text-zinc-100"
       />
     </div>
   );

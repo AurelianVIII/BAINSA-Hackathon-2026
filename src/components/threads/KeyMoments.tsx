@@ -71,7 +71,7 @@ export function KeyMoments({
                       onClick={() => onSeek(item.start)}
                       className={`flex flex-1 gap-2 rounded-lg px-2 py-1.5 text-left text-sm transition-colors ${
                         isActive
-                          ? "bg-indigo-50 dark:bg-indigo-950"
+                          ? "bg-zinc-100 dark:bg-zinc-800"
                           : "hover:bg-zinc-50 dark:hover:bg-zinc-800"
                       }`}
                     >
@@ -93,7 +93,7 @@ export function KeyMoments({
                     {onRequestSummary && (
                       <button
                         onClick={() => onRequestSummary(windowForItem(item))}
-                        className="mt-1 shrink-0 rounded-md px-2 py-1 text-xs font-medium text-indigo-600 transition-colors hover:bg-indigo-50 dark:text-indigo-400 dark:hover:bg-indigo-950"
+                        className="mt-1 shrink-0 rounded-md px-2 py-1 text-xs font-medium text-zinc-900 transition-colors hover:bg-zinc-100 dark:text-zinc-400 dark:hover:bg-zinc-800"
                       >
                         Summarise
                       </button>
