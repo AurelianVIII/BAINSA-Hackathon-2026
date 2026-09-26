@@ -37,7 +37,6 @@ import {
 } from "@/lib/transcription/live";
 
 const LESSON_DURATION = 300;
-const NO_ITEMS: TranscriptItem[] = [];
 const LESSON_SUBJECT = "Biology";
 const LESSON_TITLE = "Photosynthesis and the Calvin Cycle";
 
@@ -221,13 +220,13 @@ export default function Home() {
     return () => clearInterval(interval);
   }, [isPlaying, speed, isYouTube, isTranscribing]);
 
-  // Whichever transcript the lesson is currently running on: live speech
-  // first, then a YouTube video's real captions, then the demo script.
-  const isLiveLesson = liveItems !== null;
-  const isYouTubeLesson = isYouTube && !isLiveLesson;
-  const isDemoLesson = !isLiveLesson && !isYouTubeLesson;
+  // Whichever transcript the lesson is currently running on: YouTube video
+  // captions first (if available), then live speech, then the demo script.
+  const isYouTubeLesson = isYouTube && youtubeReady !== null;
+  const isLiveLesson = !isYouTubeLesson && liveItems !== null;
+  const isDemoLesson = !isYouTubeLesson && !isLiveLesson;
   const activeTranscript =
-    liveItems ?? (isYouTube ? (youtubeReady?.items ?? NO_ITEMS) : transcript);
+    (isYouTubeLesson ? youtubeReady?.items : null) ?? liveItems ?? transcript;
   const activeDuration = isLiveLesson
     ? Math.max(
         LIVE_MIN_DURATION,
