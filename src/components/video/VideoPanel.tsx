@@ -455,16 +455,18 @@ export function VideoPanel({
         <span className="hidden shrink-0 text-xs text-zinc-400 xl:inline dark:text-zinc-500">
           Space play · ← → seek
         </span>
-        <input
-          type="range"
-          min={0}
-          max={duration}
-          step={1}
-          value={currentTime}
-          aria-label="Seek lesson"
-          onChange={(e) => onSeek(Number(e.target.value))}
-          className="flex-1 accent-zinc-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-900"
-        />
+        {!videoId && (
+          <input
+            type="range"
+            min={0}
+            max={duration}
+            step={1}
+            value={currentTime}
+            aria-label="Seek lesson"
+            onChange={(e) => onSeek(Number(e.target.value))}
+            className="flex-1 accent-zinc-900 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-900"
+          />
+        )}
       </div>
     </div>
   );

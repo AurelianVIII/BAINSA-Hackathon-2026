@@ -5,6 +5,7 @@ import { Card } from "@/components/ui/Card";
 import { SummaryFlowchart } from "@/components/summary/SummaryFlowchart";
 import { buildVisualSummary } from "@/lib/summary";
 import type { MissedWindow, VisualSummaryData } from "@/lib/summary/types";
+import type { TranscriptItem } from "@/types";
 import { transcript } from "@/data/transcript";
 
 /** How long to wait for the AI summary before staying with the local one. */
@@ -39,10 +40,21 @@ function SparkleIcon() {
  * instant the student asks — the AI route is an enhancement layered on
  * top, never something standing between the click and the answer.
  */
-export function AiSummaryPanel({ request }: { request: MissedWindow | null }) {
+export function AiSummaryPanel({
+  request,
+  items,
+}: {
+  request: MissedWindow | null;
+  /** The lesson actually playing. Omit for the built-in demo lesson. */
+  items?: TranscriptItem[];
+}) {
+  // Summarise the lesson that is running, not the demo transcript. Without
+  // this a live-transcribed or YouTube lesson was described using the
+  // built-in photosynthesis script.
+  const lesson = items ?? transcript;
   const local = useMemo(
-    () => (request ? buildVisualSummary(transcript, request) : null),
-    [request]
+    () => (request ? buildVisualSummary(lesson, request) : null),
+    [request, lesson]
   );
 
   // Keyed by request id rather than reset on change, so switching windows
@@ -56,6 +68,13 @@ export function AiSummaryPanel({ request }: { request: MissedWindow | null }) {
   // scrolls, and the panel sits below the alert that triggered it — without
   // this the student clicks "Show me a summary" and sees only the heading.
   const panelRef = useRef<HTMLDivElement>(null);
+  // A live transcript grows with every phrase spoken. Read it through a ref
+  // so the summary fetch below is triggered by a new request only, and does
+  // not re-fire each time another line is transcribed.
+  const itemsRef = useRef(items);
+  useEffect(() => {
+    itemsRef.current = items;
+  }, [items]);
   useEffect(() => {
     if (!request) return;
 
@@ -75,7 +94,11 @@ export function AiSummaryPanel({ request }: { request: MissedWindow | null }) {
     fetch("/api/summary", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ start: request.start, end: request.end }),
+      body: JSON.stringify(
+        itemsRef.current
+          ? { start: request.start, end: request.end, items: itemsRef.current }
+          : { start: request.start, end: request.end }
+      ),
       signal: controller.signal,
     })
       .then((response) => (response.ok ? response.json() : null))
@@ -138,7 +161,7 @@ export function AiSummaryPanel({ request }: { request: MissedWindow | null }) {
       </p>
 
       <div className="mt-4 rounded-lg border border-zinc-100 bg-zinc-50/60 p-3 dark:border-zinc-800 dark:bg-zinc-950/40">
-        <SummaryFlowchart data={data} />
+        {data.nodes.length > 0 && <SummaryFlowchart data={data} />}
       </div>
       </Card>
     </div>

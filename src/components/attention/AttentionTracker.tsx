@@ -211,7 +211,19 @@ export function AttentionTracker({
 
   return (
     <Card title="Attention tracker" className="relative">
-      <div className="mb-2 flex items-center justify-between">
+      {/* Hidden video element keeping background MediaPipe inference active when real camera is on */}
+      {useRealCamera && (
+        <video
+          ref={videoRef}
+          autoPlay
+          muted
+          playsInline
+          aria-hidden="true"
+          className="hidden"
+        />
+      )}
+
+      <div className="mb-3 flex items-center justify-between">
         <span
           role="status"
           aria-live="polite"
@@ -219,51 +231,28 @@ export function AttentionTracker({
         >
           {label}
         </span>
-        {useRealCamera && (
-          <span className="text-xs text-zinc-400">Real webcam — Settings to turn off</span>
-        )}
-      </div>
-      {/* max-h caps the feed so the panel cannot eat the right column.
-          At 4/3 in a ~750px column this renders ~560px tall, which pushed
-          the catch-up alert and the AI summary below the fold. */}
-      <div className="relative mx-auto flex aspect-[4/3] max-h-[240px] w-full max-w-[320px] items-center justify-center overflow-hidden rounded-lg bg-zinc-900">
         {useRealCamera ? (
-          <video
-            ref={videoRef}
-            autoPlay
-            muted
-            playsInline
-            className="h-full w-full object-cover"
-          />
-        ) : (
-          <svg viewBox="0 0 100 100" className="h-2/3 w-2/3 text-zinc-600" fill="currentColor">
-            <circle cx="50" cy="38" r="18" />
-            <path d="M20 95 C20 65 35 55 50 55 C65 55 80 65 80 95 Z" />
-          </svg>
-        )}
-        <div className="absolute left-1/2 top-[34%] h-16 w-16 -translate-x-1/2 -translate-y-1/2 rounded-md border-2 border-emerald-400">
-          <span className="absolute -left-0.5 -top-0.5 h-2 w-2 border-l-2 border-t-2 border-emerald-400" />
-          <span className="absolute -right-0.5 -top-0.5 h-2 w-2 border-r-2 border-t-2 border-emerald-400" />
-          <span className="absolute -bottom-0.5 -left-0.5 h-2 w-2 border-b-2 border-l-2 border-emerald-400" />
-          <span className="absolute -bottom-0.5 -right-0.5 h-2 w-2 border-b-2 border-r-2 border-emerald-400" />
-        </div>
-        {useRealCamera && (
-          <span className="absolute bottom-2 left-2 rounded-full bg-black/60 px-2 py-0.5 text-[11px] text-white">
-            {liveSample ? "Live detection" : "Detecting…"}
+          <span className="flex items-center gap-1.5 text-xs font-medium text-emerald-600 dark:text-emerald-400">
+            <span className="h-2 w-2 rounded-full bg-emerald-500 animate-pulse" />
+            Live webcam active
           </span>
+        ) : (
+          <span className="text-xs text-zinc-400">Simulated signal · Settings for camera</span>
         )}
       </div>
+
       {cameraError && (
-        <p role="alert" className="mt-2 text-xs text-rose-500">
+        <p role="alert" className="mb-2 text-xs text-rose-500">
           {cameraError}
         </p>
       )}
       {detectionError && (
-        <p role="alert" className="mt-2 text-xs text-amber-500">
+        <p role="alert" className="mb-2 text-xs text-amber-500">
           {detectionError}
         </p>
       )}
-      <div className="mt-4 flex flex-col gap-3">
+
+      <div className="flex flex-col gap-3">
         <Bar label="Gaze to screen" value={effectiveSample.gaze} tone="emerald" />
         <Bar label="Confusion (brow)" value={effectiveSample.confusion} tone="rose" />
         <Bar label="Engagement" value={effectiveSample.engagement} tone="emerald" />
