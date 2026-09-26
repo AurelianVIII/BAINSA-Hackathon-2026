@@ -15,6 +15,7 @@ const geistMono = Geist_Mono({
 export const metadata: Metadata = {
   title: "FocusAid",
   description: "AI learning accessibility tool for students who miss parts of a lesson.",
+  viewport: "width=device-width, initial-scale=1.0, viewport-fit=cover",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
