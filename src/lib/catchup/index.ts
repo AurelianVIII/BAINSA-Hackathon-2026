@@ -1,5 +1,4 @@
-import type { AttentionEvent, CatchUpResult, TranscriptItem } from "@/types";
-import type { MissedWindow } from "./types";
+import type { AttentionEvent, CatchUpResult, MissedWindow, TranscriptItem } from "@/types";
 
 const MAX_BULLETS = 3;
 const MERGE_GAP_SECONDS = 5;

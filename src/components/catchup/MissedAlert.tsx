@@ -1,4 +1,4 @@
-import type { MissedWindow } from "@/lib/catchup/types";
+import type { MissedWindow } from "@/types";
 
 /**
  * Owned by the Catch-up feature team. Renders nothing when `window` is
