@@ -79,9 +79,10 @@ function clamp01(value: number) {
  *   closed — there's no direction signal either way. Multiplying by
  *   openness stops "eyes closed" from reading as "gaze locked on screen".
  *
- * Confusion is the brow-furrow blendshapes, amplified — MediaPipe's raw
- * scores for a natural furrow tend to sit well under 1.0 even for a
- * clearly furrowed brow.
+ * Confusion is the stronger of brow-furrow or brow-raise, amplified —
+ * both a furrowed ("processing this") and a raised ("wait, what?") brow
+ * read as a non-neutral, questioning expression, and MediaPipe's raw
+ * scores for either tend to sit well under 1.0 even when clearly visible.
  *
  * Returns null when no face is detected in the frame.
  */
@@ -109,7 +110,12 @@ export function sampleFromFaceLandmarkerResult(
 
   const browFurrow =
     (blendshapeScore(result, "browDownLeft") + blendshapeScore(result, "browDownRight")) / 2;
-  const confusion = clamp01(browFurrow * BROW_FURROW_GAIN);
+  const browRaise =
+    (blendshapeScore(result, "browInnerUp") +
+      blendshapeScore(result, "browOuterUpLeft") +
+      blendshapeScore(result, "browOuterUpRight")) /
+    3;
+  const confusion = clamp01(Math.max(browFurrow, browRaise) * BROW_FURROW_GAIN);
 
   const engagement = clamp01(gaze * 0.7 + eyeOpenness * 0.3);
 
