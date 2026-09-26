@@ -8,7 +8,7 @@ import type { CatchUpResult, TranscriptItem } from "@/types";
 /**
  * Owned by the Catch-up feature team. Minimal working demo (manual
  * "Catch me up" over the last 60s) — keep the `currentTime` prop as the
- * input contract. `items` defaults to the mock lesson transcript.
+ * input contract. `items` is the lesson actually running.
  */
 export function CatchUpButton({
   currentTime,
@@ -16,7 +16,7 @@ export function CatchUpButton({
   title,
 }: {
   currentTime: number;
-  items?: TranscriptItem[];
+  items: TranscriptItem[];
   title?: string;
 }) {
   const [result, setResult] = useState<CatchUpResult | null>(null);

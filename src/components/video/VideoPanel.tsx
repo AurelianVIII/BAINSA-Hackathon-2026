@@ -40,24 +40,20 @@ function formatTime(seconds: number) {
   return `${m}:${s}`;
 }
 
-const WHITEBOARD_POINTS = [
-  "Light-dependent reactions → ATP + NADPH",
-  "Light-independent reactions (Calvin cycle)",
-  "CO₂ + ATP/NADPH → G3P → glucose",
-];
-
 /**
- * The lesson stage. Defaults to a CSS composition (no real video file needed
- * for the demo), with an option to swap in a real YouTube video. In YouTube
- * mode the player is the clock: it reports its position, duration and
- * play state up through the `onVideo*` callbacks, and the page's own clock
- * stands down. Either way, the burned-in caption bar stays on top: this is
- * an accessibility product for deaf learners, so the captions are the hero
- * element and are sized like it.
+ * The lesson stage. Holds one of exactly two real sources: a YouTube video
+ * or live speech-to-text from the room. In YouTube mode the player is the
+ * clock — it reports its position, duration and play state up through the
+ * `onVideo*` callbacks. With no lesson loaded it shows an empty state that
+ * asks for one, rather than inventing a lesson to display.
+ *
+ * Either way the caption bar stays on top: this is an accessibility product
+ * for deaf learners, so the captions are the hero element.
  */
 export function VideoPanel({
   subject,
   title,
+  hasLesson,
   currentTime,
   duration,
   isPlaying,
@@ -78,10 +74,11 @@ export function VideoPanel({
   onVideoPlayingChange,
   onStartTranscription,
   onStopTranscription,
-  onUseDemoLesson,
 }: {
   subject: string;
   title: string;
+  /** False before a YouTube video or live transcription has been started. */
+  hasLesson: boolean;
   currentTime: number;
   duration: number;
   isPlaying: boolean;
@@ -103,7 +100,6 @@ export function VideoPanel({
   onVideoPlayingChange: (playing: boolean) => void;
   onStartTranscription: () => void;
   onStopTranscription: () => void;
-  onUseDemoLesson?: () => void;
 }) {
   const [urlDraft, setUrlDraft] = useState("");
   const [isFormOpen, setIsFormOpen] = useState(false);
@@ -267,15 +263,14 @@ export function VideoPanel({
         <h2 className="flex-1 truncate text-sm font-semibold text-zinc-900 dark:text-zinc-50">
           {title}
         </h2>
-        {/* Lesson source: the demo (default), or one of exactly two real
-            sources — never more than one active at a time. */}
+        {/* Lesson source: exactly one of the two real ones is ever active. */}
         {videoId ? (
           <button
             type="button"
             onClick={handleRemoveVideo}
             className="shrink-0 rounded-full border border-zinc-300 px-2 py-0.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-900 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
           >
-            Use mock lesson
+            Remove video
           </button>
         ) : isLiveLesson ? (
           <div className="flex shrink-0 items-center gap-1.5">
@@ -290,14 +285,6 @@ export function VideoPanel({
                   className="h-1.5 w-1.5 animate-pulse rounded-full bg-white motion-reduce:animate-none"
                 />
                 Stop transcribing
-              </button>
-            ) : onUseDemoLesson ? (
-              <button
-                type="button"
-                onClick={onUseDemoLesson}
-                className="rounded-full border border-zinc-300 px-2 py-0.5 text-xs font-medium text-zinc-600 hover:bg-zinc-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-zinc-900 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800"
-              >
-                Use mock lesson
               </button>
             ) : null}
           </div>
@@ -384,36 +371,68 @@ export function VideoPanel({
                   onClick={handleRemoveVideo}
                   className="rounded-full bg-white px-3 py-1.5 text-xs font-medium text-zinc-900 hover:bg-zinc-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
                 >
-                  Use mock lesson
+                  Try another video
                 </button>
               </div>
             )}
           </div>
-        ) : (
-          <>
-            {/* Whiteboard */}
-            <div className="absolute left-[6%] top-[10%] h-[62%] w-[52%] rounded-md bg-slate-50 p-4 shadow-lg">
-              <p className="mb-2 border-b border-slate-300 pb-1.5 text-sm font-bold text-slate-800">
-                Today&apos;s key points
-              </p>
-              <ul className="flex flex-col gap-1.5">
-                {WHITEBOARD_POINTS.map((point) => (
-                  <li key={point} className="text-xs leading-snug text-slate-700">
-                    • {point}
-                  </li>
-                ))}
-              </ul>
-            </div>
-
-            {/* Presenter */}
-            <div className="absolute bottom-[32%] right-[8%] flex flex-col items-center gap-2">
-              <div className="h-16 w-16 rounded-full bg-gradient-to-b from-amber-200 to-amber-300 shadow-md" />
-              <div className="h-12 w-20 rounded-t-3xl bg-teal-600 shadow-md" />
-            </div>
-            <span className="absolute bottom-3 left-[6%] rounded-full bg-black/60 px-2.5 py-1 text-xs font-medium text-white backdrop-blur-sm">
-              Prof. Emma Rossi
+        ) : isLiveLesson ? (
+          // Live transcription has no picture — the room is the lesson. Show
+          // that it is running rather than a black rectangle.
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center">
+            <span className="flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-medium text-white">
+              <span
+                aria-hidden
+                className="h-1.5 w-1.5 animate-pulse rounded-full bg-rose-400 motion-reduce:animate-none"
+              />
+              Listening to this room
             </span>
-          </>
+            <p className="max-w-sm text-sm text-slate-300">
+              Captions appear below as the lesson is spoken.
+            </p>
+          </div>
+        ) : (
+          // No lesson yet. Say what to do next instead of showing a stand-in.
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center">
+            <svg
+              viewBox="0 0 24 24"
+              className="h-9 w-9 text-slate-500"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="1.5"
+              aria-hidden="true"
+            >
+              <rect x="2.5" y="5" width="19" height="14" rx="2.5" />
+              <path d="M10 9.5l5 2.5-5 2.5z" fill="currentColor" stroke="none" />
+            </svg>
+            <p className="text-sm font-medium text-slate-200">No lesson loaded</p>
+            <p className="max-w-sm text-xs leading-relaxed text-slate-400">
+              Paste a YouTube link, or start live transcription to caption a
+              lesson happening in the room.
+            </p>
+            <div className="mt-1 flex flex-wrap items-center justify-center gap-2">
+              <button
+                type="button"
+                onClick={onStartTranscription}
+                disabled={!transcriptionSupported}
+                title={
+                  transcriptionSupported
+                    ? undefined
+                    : "This browser has no speech recognition — try Chrome or Edge."
+                }
+                className="rounded-full bg-white px-3 py-1.5 text-xs font-medium text-zinc-900 hover:bg-zinc-200 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Start live transcription
+              </button>
+              <button
+                type="button"
+                onClick={() => setIsFormOpen(true)}
+                className="rounded-full border border-white/30 px-3 py-1.5 text-xs font-medium text-white hover:bg-white/10 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-white"
+              >
+                Use a YouTube video
+              </button>
+            </div>
+          </div>
         )}
 
         {/* Floating compact captions. Sleek, unobtrusive badge that only covers
@@ -437,8 +456,12 @@ export function VideoPanel({
         )}
       </div>
 
-      {/* Controls */}
-      <div className="flex items-center gap-3">
+      {/* Controls. Hidden with no lesson loaded — there is nothing to play,
+          and a dead transport bar reads as a broken app. */}
+      <div
+        className="flex items-center gap-3"
+        hidden={!hasLesson}
+      >
         <button
           type="button"
           onClick={onPlayPause}

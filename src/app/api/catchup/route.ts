@@ -1,5 +1,4 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { transcript } from "@/data/transcript";
 import { generateCatchUp } from "@/lib/catchup";
 import type { CatchUpResult, TranscriptItem } from "@/types";
 
@@ -8,7 +7,7 @@ import type { CatchUpResult, TranscriptItem } from "@/types";
  *
  * Generates the "what did I miss?" summary. The smart local result
  * is computed first and returned whenever the cloud AI path is
- * unavailable, disabled, slow, or malformed — the demo must never depend
+ * unavailable, disabled, slow, or malformed — catching up must never depend
  * on a network call, so every path returns a usable summary.
  */
 
@@ -60,7 +59,7 @@ const MAX_ITEM_TEXT_LENGTH = 2000;
 
 /**
  * Lines sent by the client (a YouTube video's captions) in place of the
- * mock lesson. Anything malformed or oversized is rejected.
+ * lesson running in the client. Anything malformed or oversized is rejected.
  */
 function parseClientItems(value: unknown): TranscriptItem[] | null {
   if (!Array.isArray(value) || value.length > MAX_CLIENT_ITEMS) {
@@ -111,9 +110,10 @@ export async function POST(request: Request) {
     );
   }
 
-  const source = clientItems ?? transcript;
-  const isDemoLesson = clientItems === null;
-  const lessonDescription = clientTitle || (isDemoLesson ? "a biology lesson on photosynthesis" : "the lesson");
+  // The lesson only exists in the client now; there is no server-side
+  // script to fall back to.
+  const source = clientItems ?? [];
+  const lessonDescription = clientTitle || "the lesson";
 
   // Local smart catch-up result
   const local = generateCatchUp(source, start, end, clientTitle);

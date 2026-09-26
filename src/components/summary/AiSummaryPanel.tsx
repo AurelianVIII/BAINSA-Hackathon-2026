@@ -6,7 +6,6 @@ import { SummaryFlowchart } from "@/components/summary/SummaryFlowchart";
 import { buildVisualSummary, getItemsInWindow } from "@/lib/summary";
 import type { MissedWindow, VisualSummaryData } from "@/lib/summary/types";
 import type { TranscriptItem } from "@/types";
-import { transcript } from "@/data/transcript";
 import { highlight } from "@/lib/ai/local-model";
 import { useLocalModel } from "@/lib/ai/useLocalModel";
 
@@ -52,14 +51,11 @@ export function AiSummaryPanel({
   lessonTitle,
 }: {
   request: MissedWindow | null;
-  /** The lesson actually playing. Omit for the built-in demo lesson. */
-  items?: TranscriptItem[];
+  /** The lesson actually playing — live speech or a video's captions. */
+  items: TranscriptItem[];
   lessonTitle?: string;
 }) {
-  // Summarise the lesson that is running, not the demo transcript. Without
-  // this a live-transcribed or YouTube lesson was described using the
-  // built-in photosynthesis script.
-  const lesson = items ?? transcript;
+  const lesson = items;
   const local = useMemo(
     () => (request ? buildVisualSummary(lesson, request) : null),
     [request, lesson]

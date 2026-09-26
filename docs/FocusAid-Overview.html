@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>FocusAid — Overview</title>
+<style>
+  @page { size: A4; margin: 14mm 15mm; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: "Segoe UI", Inter, -apple-system, system-ui, sans-serif;
+    color: #18181b;
+    font-size: 10.1pt;
+    line-height: 1.46;
+    margin: 0;
+  }
+  h1 { font-size: 20pt; margin: 0; letter-spacing: -0.02em; }
+  .tagline { font-size: 10.5pt; color: #52525b; margin: 3px 0 0; }
+  .rule { height: 2.5px; background: #18181b; margin: 9px 0 13px; }
+  h2 {
+    font-size: 10.6pt; margin: 13px 0 5px; letter-spacing: 0.05em;
+    text-transform: uppercase; color: #18181b;
+  }
+  p { margin: 0 0 7px; }
+  ul { margin: 0 0 7px; padding-left: 17px; }
+  li { margin-bottom: 3px; }
+  strong { color: #000; }
+  .lead {
+    font-size: 11.4pt; line-height: 1.42; color: #18181b;
+    border-left: 3px solid #18181b; padding-left: 11px; margin-bottom: 11px;
+  }
+  .loop { border: 1px solid #d4d4d8; border-radius: 6px; padding: 9px 12px; margin: 0 0 8px; }
+  .loop ol { margin: 0; padding-left: 18px; }
+  .loop li { margin-bottom: 3.5px; }
+  table { width: 100%; border-collapse: collapse; margin: 4px 0 8px; font-size: 9.3pt; }
+  td { padding: 3.5px 7px; border-bottom: 1px solid #e4e4e7; vertical-align: top; }
+  td.said { color: #b91c1c; width: 47%; }
+  td.truth { color: #3f3f46; }
+  .callout {
+    background: #fafafa; border: 1px solid #d4d4d8; border-left: 3px solid #18181b;
+    border-radius: 4px; padding: 9px 12px; margin: 8px 0;
+  }
+  .foot { margin-top: 12px; padding-top: 7px; border-top: 1px solid #d4d4d8;
+          font-size: 8.7pt; color: #71717a; }
+  .avoid { break-inside: avoid; }
+</style>
+</head>
+<body>
+
+<h1>FocusAid</h1>
+<p class="tagline">Catching what a Deaf student misses when they look away &mdash; and bridging it, in the moment.</p>
+<div class="rule"></div>
+
+<p class="lead">
+A Deaf or hard-of-hearing student in a lecture is doing two jobs with one channel.
+They are <strong>reading</strong> &mdash; captions, an interpreter, a notetaker &mdash; and they are
+<strong>watching</strong>: the slide, the diagram, the teacher's hands. Vision cannot do both at once.
+Every glance down to read costs the board. Every glance up to watch costs the words.
+</p>
+
+<h2>The problem we picked</h2>
+<p>
+A hearing student never has to solve this. They listen <em>while</em> looking, because audio is a
+parallel channel. For our user that channel is closed, so attention becomes a queue instead of a
+stream &mdash; and in a live lecture there is no rewind.
+</p>
+<p>
+So the gap is not captions. Most lecture halls already have them. The gap is
+<strong>the thirty seconds after attention breaks</strong>: the student knows they lost something,
+does not know what, and the class has already moved on. That specific, repeated, invisible loss is
+what FocusAid exists to close.
+</p>
+
+<h2>What it does</h2>
+<div class="loop">
+<ol>
+  <li><strong>Transcribes the lesson live</strong> from the room's audio, or reads a video lesson's captions.</li>
+  <li><strong>Watches attention</strong> through the webcam &mdash; gaze direction, brow-furrow confusion, and head pose &mdash; entirely in the browser.</li>
+  <li><strong>Detects a missed window</strong> when attention drops for a sustained stretch, and marks it on the lesson timeline.</li>
+  <li><strong>Bridges it</strong> &mdash; one tap surfaces what was actually said while they were away, as a short summary and a diagram.</li>
+</ol>
+</div>
+<p>
+There is also a manual <em>&ldquo;I&rsquo;m looking away&rdquo;</em> button, because the student always
+knows before the camera does.
+</p>
+
+<h2>Why this, and not another captioning tool</h2>
+<p>
+Accessibility tooling tends to stop at <em>delivery</em>: get the words on screen and the job is done.
+That assumes the student was available to receive them. The interesting, unsolved part is
+<strong>recovery</strong> &mdash; and recovery is only possible if something is tracking attention and
+content on the same clock. That is the product we wanted to build, and it is why attention
+tracking and transcription are one system here rather than two features.
+</p>
+
+<h2 class="avoid">What makes it different</h2>
+
+<p class="avoid"><strong>1. It closes a loop.</strong> Most tools display. FocusAid notices a gap, identifies
+what fell into it, and offers it back. Detection and content share a single timeline, so
+&ldquo;what was said at 2:14&rdquo; is unambiguous.</p>
+
+<div class="callout avoid">
+<p style="margin-bottom:5px"><strong>2. We measured our AI instead of demoing it.</strong></p>
+<p>
+We built a small language model into the browser (SmolLM2-360M, WebGPU) to rewrite missed passages
+in plainer language. Before trusting it, we tested it against our lesson transcript. It was faithful
+on <strong>0 of 6 passages</strong>:
+</p>
+<table>
+  <tr><td class="said">&ldquo;the Calvin cycle gets <strong>oxygen</strong> from the air&rdquo;</td><td class="truth">it takes carbon dioxide</td></tr>
+  <tr><td class="said">&ldquo;RuBisCO helps fix some of that <strong>sugar</strong>&rdquo;</td><td class="truth">it fixes carbon</td></tr>
+  <tr><td class="said">&ldquo;chlorophyll in <strong>your cells</strong>&rdquo;</td><td class="truth">wrong organism</td></tr>
+  <tr><td class="said">&ldquo;we&rsquo;ll see the <strong>light-dependent</strong> reactions&rdquo;</td><td class="truth">the passage said light-<em>in</em>dependent</td></tr>
+</table>
+<p>
+A model nearly twice the size (Qwen2.5-0.5B) was no better &mdash; only differently wrong, inventing a
+toy-car analogy for mitosis.
+</p>
+<p style="margin-bottom:0">
+This mattered more to us than it would to most teams, for one reason:
+<strong>a hearing student catches these errors against the audio. Ours cannot.</strong> The entire
+reason they are reading our text is that the audio channel is closed to them. An accessibility tool
+that hallucinates is not merely inaccurate &mdash; it exploits the exact dependency it created.
+</p>
+</div>
+
+<p class="avoid">
+So we changed the architecture rather than the prompt. <strong>The on-device model is no longer
+allowed to write.</strong> It only <em>selects</em> which of the teacher's own sentences matters most,
+and every selection is verified against the source transcript before it reaches the screen. Anything
+that is not verbatim is discarded. Measured: 5 of 6 windows now produce a verified key point, and the
+sixth shows nothing rather than guessing. The model can still be wrong about <em>importance</em>,
+which the student recovers from in a second. It can no longer be wrong about <em>facts</em>.
+</p>
+
+<p class="avoid"><strong>3. It degrades instead of failing.</strong> Summaries are built from the
+transcript itself and render instantly; AI is layered on top as an upgrade, never placed between the
+student's tap and an answer. No network, no API key, no WebGPU, no microphone &mdash; each removes
+capability without removing the product. Attention tracking and the on-device model run entirely
+in the browser, so a student's webcam feed and lesson audio never leave their machine.</p>
+
+<h2>Where it stands</h2>
+<p>
+Working end to end in the browser: live transcription, real webcam attention tracking, missed-window
+detection, catch-up summaries with generated diagrams, a searchable transcript with persistent notes,
+and full keyboard and screen-reader support. The AI layer runs in three tiers &mdash; hosted model when
+a key is configured, on-device model when WebGPU is available, and a deterministic summary built from
+the teacher's words always.
+</p>
+
+<p class="foot">
+FocusAid &mdash; built in 5 hours by four developers working in parallel. Next.js 16, React 19,
+MediaPipe, transformers.js. See the technical brief for implementation detail.
+</p>
+
+</body>
+</html>

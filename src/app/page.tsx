@@ -18,13 +18,11 @@ import { AttentionTimeline } from "@/components/attention/AttentionTimeline";
 import { AiSummaryPanel } from "@/components/summary/AiSummaryPanel";
 import { VisualSummaryTab } from "@/components/summary/VisualSummaryTab";
 import { KeyMoments } from "@/components/threads/KeyMoments";
-import { attentionSamples } from "@/data/attention-samples";
 import { buildCaptions, getCaptionAt } from "@/data/captions";
 import {
   buildLiveTimelineBands,
   deriveAttentionEvents,
   getAttentionLevel,
-  getSampleAt,
 } from "@/lib/attention";
 import { buildMissedWindow, getPendingAlert } from "@/lib/catchup";
 import { useYouTubeCaptions } from "@/lib/video/useYouTubeCaptions";
@@ -40,11 +38,12 @@ import {
   type LiveTranscriber,
 } from "@/lib/transcription/live";
 
-const LESSON_DURATION = 300;
+/** Timeline length before a lesson is loaded, so the axis has a scale. */
+const EMPTY_DURATION = 300;
 /** Stable empty array, so memoised consumers do not see a new reference. */
 const NO_EVENTS: AttentionEvent[] = [];
-const LESSON_SUBJECT = "Biology";
-const LESSON_TITLE = "Photosynthesis and the Calvin Cycle";
+/** Stable neutral reading for a second nothing was recorded against. */
+const NEUTRAL_SAMPLE: AttentionSample = { t: 0, gaze: 0.5, confusion: 0, engagement: 0.5 };
 
 /** Timeline headroom kept ahead of a live transcript, in seconds. */
 const LIVE_DURATION_HEADROOM = 15;
@@ -63,9 +62,10 @@ const MISSED_EVENT_TYPES = ["looking-away", "low-attention"] as const;
  *
  * Page-level state is the four pieces agreed in ROADMAP §2 (`currentTime`,
  * `isPlaying`, `summaryRequest`, `dismissedAlertIds`) plus the lesson
- * source: the demo script, a YouTube video (its real captions), or live
- * speech-to-text. A real source also owns the clock — the YouTube player
- * reports its position, the recogniser its elapsed time.
+ * source. There are exactly two, both real: a YouTube video (its own
+ * captions) or live speech-to-text from the room. Whichever is running
+ * also owns the clock — the player reports its position, the recogniser
+ * its elapsed time — so this page never invents playback time.
  */
 export default function Home() {
   const [currentTime, setCurrentTime] = useState(0);
@@ -84,16 +84,14 @@ export default function Home() {
     youtubeCaptions.status === "ready" || youtubeCaptions.status === "unavailable"
       ? youtubeCaptions
       : null;
-  // Whether AttentionTracker's real webcam mode is on. While it is, the
-  // timeline shows only genuine recorded readings, not the pre-built demo
-  // curve/bands — the two are never mixed together.
+  // Whether AttentionTracker's real webcam mode is on. The timeline shows
+  // only genuine recorded readings; with the camera off there is no
+  // attention data at all, rather than a stand-in curve.
   const [hasRealCamera, setHasRealCamera] = useState(false);
-  // Real webcam detections recorded by second, keyed on the same integer
-  // seconds as the simulated `attentionSamples`.
+  // Real webcam detections recorded by second, keyed on integer seconds.
   const [recordedSamples, setRecordedSamples] = useState<Record<number, AttentionSample>>({});
-  // Live speech-to-text. `liveItems === null` means the built-in demo
-  // lesson is showing; an array means the transcript is being produced from
-  // the microphone right now.
+  // Live speech-to-text. `liveItems === null` means no live lesson; an
+  // array means the transcript is being produced from the microphone now.
   const [liveItems, setLiveItems] = useState<TranscriptItem[] | null>(null);
   const [interimText, setInterimText] = useState("");
   const [isTranscribing, setIsTranscribing] = useState(false);
@@ -170,7 +168,7 @@ export default function Home() {
   };
 
   // Read inside the keyboard handler, which is registered once.
-  const activeDurationRef = useRef(LESSON_DURATION);
+  const activeDurationRef = useRef(EMPTY_DURATION);
 
   // Keyboard shortcuts for driving playback hands-free. Interactive
   // elements are skipped so this never steals space from a focused button
@@ -206,22 +204,6 @@ export default function Home() {
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, []);
 
-  // The playback clock. Everything on this screen is time-driven, so this
-  // interval is what makes the demo move at all — unless a real source is
-  // driving currentTime instead (a YouTube video's own position, or the
-  // recogniser's elapsed time).
-  useEffect(() => {
-    if (!isPlaying || isYouTube || isTranscribing) return;
-    const interval = setInterval(() => {
-      if (currentTimeRef.current >= LESSON_DURATION) {
-        setIsPlaying(false);
-        return;
-      }
-      setCurrentTime((time) => Math.min(time + 1, LESSON_DURATION));
-    }, 1000 / speed);
-    return () => clearInterval(interval);
-  }, [isPlaying, speed, isYouTube, isTranscribing]);
-
   // Whichever transcript the lesson is currently running on: live speech
   // when actively transcribing, otherwise YouTube video captions (if loaded).
   const isLiveLesson = liveItems !== null;
@@ -236,8 +218,9 @@ export default function Home() {
         Math.ceil((activeTranscript.at(-1)?.end ?? 0) + LIVE_DURATION_HEADROOM)
       )
     : isYouTube
-      ? Math.ceil(videoDuration ?? youtubeMeta?.duration ?? 0) || (youtubeReady?.duration ?? LESSON_DURATION)
-      : LESSON_DURATION;
+      ? Math.ceil(videoDuration ?? youtubeMeta?.duration ?? 0) ||
+        (youtubeReady?.duration ?? EMPTY_DURATION)
+      : EMPTY_DURATION;
   useEffect(() => {
     activeDurationRef.current = activeDuration;
   }, [activeDuration]);
@@ -263,8 +246,9 @@ export default function Home() {
   const currentRecordedSample = hasRealCamera
     ? (latestLiveSample ?? recordedSamples[Math.round(currentTime)])
     : undefined;
-  const attentionSample =
-    currentRecordedSample ?? getSampleAt(attentionSamples, currentTime);
+  // No camera means no attention reading — the panel shows a neutral
+  // baseline rather than a number nothing measured.
+  const attentionSample = currentRecordedSample ?? NEUTRAL_SAMPLE;
   const attentionLevel = getAttentionLevel(attentionSample);
   // Live captions show the phrase still being spoken, then the last one
   // committed. Waiting for the recogniser to finalise a sentence would put
@@ -290,29 +274,20 @@ export default function Home() {
     const key = Math.round(sample.t);
     setRecordedSamples((prev) => (key in prev ? prev : { ...prev, [key]: sample }));
   };
-  // Demo mode (default) shows the pre-built simulated curve, full stop.
-  // Real-camera mode shows only genuine recorded readings — a flat neutral
-  // baseline anywhere nothing's been recorded yet — never a blend of the
-  // two, so what's on screen is always honestly one or the other.
-  // Covers the whole active lesson, so readings past the demo's 5 minutes
-  // (a long YouTube video) are shown rather than dropped.
-  const timelineSamples = useMemo(() => {
-    if (!hasRealCamera) {
-      if (isYouTubeLesson) {
-        return Array.from(
-          { length: Math.floor(activeDuration) + 1 },
-          (_, t) => ({ t, gaze: 0.5, confusion: 0, engagement: 0.5 })
-        );
-      }
-      return attentionSamples;
-    }
-    return Array.from(
-      { length: Math.floor(activeDuration) + 1 },
-      (_, t) => recordedSamples[t] ?? { t, gaze: 0.5, confusion: 0, engagement: 0.5 }
-    );
-  }, [hasRealCamera, isYouTubeLesson, recordedSamples, activeDuration]);
-  // Real detections, expressed as the same AttentionEvent shape the
-  // scripted demo uses, so everything downstream works unchanged.
+  // Only genuine recorded readings, with a flat neutral baseline wherever
+  // nothing has been recorded yet. Covers the whole active lesson so
+  // readings late in a long video are shown rather than dropped.
+  const timelineSamples = useMemo(
+    () =>
+      Array.from({ length: Math.floor(activeDuration) + 1 }, (_, t) =>
+        hasRealCamera
+          ? (recordedSamples[t] ?? { t, gaze: 0.5, confusion: 0, engagement: 0.5 })
+          : { t, gaze: 0.5, confusion: 0, engagement: 0.5 }
+      ),
+    [hasRealCamera, recordedSamples, activeDuration]
+  );
+  // Real detections, expressed as AttentionEvents so everything downstream
+  // works unchanged.
   const liveAttentionEvents = useMemo(
     () =>
       hasRealCamera
@@ -321,10 +296,9 @@ export default function Home() {
     [hasRealCamera, recordedSamples, activeDuration]
   );
 
-  // Whose account of the lesson drives the alert:
-  // - camera on  -> what was actually detected, against whatever transcript
-  //                 is running. This is the product's core loop.
-  // - camera off -> no attention data (no scripted demo lesson to fall back to).
+  // Alerts come only from what the camera actually detected, against
+  // whatever transcript is running. This is the product's core loop.
+  // Camera off means no attention data at all.
   const alertEvents = useMemo(
     () => (hasRealCamera ? liveAttentionEvents : NO_EVENTS),
     [hasRealCamera, liveAttentionEvents]
@@ -356,18 +330,26 @@ export default function Home() {
           currentTime,
           dismissedAlertIds
         );
-  // Same demo-vs-real split as timelineSamples above — scripted bands in
-  // demo mode, bands derived from genuine recordings in real-camera mode —
-  // but neither applies to a live-transcribed lesson, which has no scripted
-  // narrative to project bands from in the first place.
-  const timelineBands = useMemo(() => {
-    if (isLiveLesson) return [];
-    if (hasRealCamera) {
-      return buildLiveTimelineBands(recordedSamples, activeTranscript, Math.floor(activeDuration));
-    }
-    if (isYouTubeLesson) return [];
-    return [];
-  }, [isLiveLesson, isYouTubeLesson, hasRealCamera, recordedSamples, activeTranscript, activeDuration]);
+  // Bands are derived from genuine recordings only, and a live-transcribed
+  // lesson has no settled timeline to project them onto.
+  const timelineBands = useMemo(
+    () =>
+      hasRealCamera && !isLiveLesson
+        ? buildLiveTimelineBands(
+            recordedSamples,
+            activeTranscript,
+            Math.floor(activeDuration)
+          )
+        : [],
+    [isLiveLesson, hasRealCamera, recordedSamples, activeTranscript, activeDuration]
+  );
+
+  const hasLesson = isLiveLesson || isYouTube;
+  const lessonTitle = isLiveLesson
+    ? "Transcribing this lesson"
+    : isYouTube
+      ? (youtubeMeta?.title ?? "YouTube video")
+      : "No lesson loaded";
 
   const handleSeek = (time: number) => {
     setCurrentTime(Math.max(0, Math.min(time, activeDuration)));
@@ -392,15 +374,10 @@ export default function Home() {
                   ? youtubeReady?.autoGenerated
                     ? "YouTube · auto-captions"
                     : "YouTube"
-                  : LESSON_SUBJECT
+                  : "No lesson"
             }
-            title={
-              isLiveLesson
-                ? "Transcribing this lesson"
-                : isYouTube
-                  ? (youtubeMeta?.title ?? "YouTube video")
-                  : LESSON_TITLE
-            }
+            title={lessonTitle}
+            hasLesson={hasLesson}
             currentTime={currentTime}
             duration={activeDuration}
             isPlaying={isPlaying}
@@ -479,25 +456,13 @@ export default function Home() {
           <AiSummaryPanel
             request={summaryRequest}
             items={activeTranscript}
-            lessonTitle={
-              isLiveLesson
-                ? "Live Transcribed Lesson"
-                : isYouTube
-                  ? (youtubeMeta?.title ?? "YouTube Video")
-                  : LESSON_TITLE
-            }
+            lessonTitle={lessonTitle}
           />
 
           <CatchUpButton
             currentTime={currentTime}
             items={activeTranscript}
-            title={
-              isLiveLesson
-                ? "Live Transcribed Lesson"
-                : isYouTube
-                  ? (youtubeMeta?.title ?? "YouTube Video")
-                  : LESSON_TITLE
-            }
+            title={lessonTitle}
           />
 
           <AwayCatchUp

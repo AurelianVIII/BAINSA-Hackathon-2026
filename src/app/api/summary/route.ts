@@ -1,11 +1,5 @@
 import Anthropic from "@anthropic-ai/sdk";
-import { transcript } from "@/data/transcript";
-import {
-  DIAGRAM_NODE_IDS,
-  buildVisualSummary,
-  getItemsInWindow,
-  graphForNodeIds,
-} from "@/lib/summary";
+import { buildVisualSummary, getItemsInWindow } from "@/lib/summary";
 import type { VisualSummaryData } from "@/lib/summary/types";
 import type { TranscriptItem } from "@/types";
 
@@ -20,25 +14,6 @@ import type { TranscriptItem } from "@/types";
  */
 
 const DEFAULT_MODEL = "claude-3-5-haiku-20241022";
-
-const DEMO_SUMMARY_SCHEMA = {
-  type: "object",
-  properties: {
-    text: {
-      type: "string",
-      description:
-        "Two or three short sentences explaining the passage in plain language.",
-    },
-    nodeIds: {
-      type: "array",
-      description:
-        "Which steps of the photosynthesis chain this passage is about, in reaction order.",
-      items: { type: "string", enum: DIAGRAM_NODE_IDS },
-    },
-  },
-  required: ["text", "nodeIds"],
-  additionalProperties: false,
-} as const;
 
 const GENERIC_SUMMARY_SCHEMA = {
   type: "object",
@@ -73,7 +48,6 @@ export async function POST(request: Request) {
     const body = await request.json();
     start = Number(body?.start) || 0;
     end = Number(body?.end) || 0;
-    // The lesson playing in the client, when it is not the demo one.
     clientItems = Array.isArray(body?.items) ? (body.items as TranscriptItem[]) : null;
     clientTitle = typeof body?.title === "string" ? body.title : undefined;
   } catch {
@@ -87,8 +61,9 @@ export async function POST(request: Request) {
     );
   }
 
-  const isDemoLesson = clientItems === null;
-  const source = clientItems ?? transcript;
+  // The lesson only exists in the client now; there is no server-side
+  // script to fall back to.
+  const source = clientItems ?? [];
   const local = buildVisualSummary(source, { start, end }, { lessonTitle: clientTitle });
 
   // If no external Anthropic API key is configured, our built-in smart AI
@@ -107,7 +82,7 @@ export async function POST(request: Request) {
       .map((item) => item.text)
       .join(" ");
 
-    const lessonSubject = clientTitle || (isDemoLesson ? "a biology lesson on photosynthesis" : local.title || "the lesson");
+    const lessonSubject = clientTitle || local.title || "the lesson";
     const model = process.env.ANTHROPIC_MODEL || DEFAULT_MODEL;
 
     const response = await client.messages.create({
@@ -118,7 +93,7 @@ export async function POST(request: Request) {
         effort: "low",
         format: {
           type: "json_schema",
-          schema: isDemoLesson ? DEMO_SUMMARY_SCHEMA : GENERIC_SUMMARY_SCHEMA,
+          schema: GENERIC_SUMMARY_SCHEMA,
         },
       },
       messages: [
@@ -136,14 +111,11 @@ export async function POST(request: Request) {
     const text = response.content.find((block) => block.type === "text");
     if (!text) return Response.json({ ...local, source: "ai" });
 
-    const parsed = JSON.parse(text.text) as {
-      text: string;
-      nodeIds?: string[];
-    };
+    const parsed = JSON.parse(text.text) as { text: string };
 
-    const graph = isDemoLesson && Array.isArray(parsed.nodeIds)
-      ? graphForNodeIds(parsed.nodeIds)
-      : { nodes: local.nodes, edges: local.edges };
+    // The diagram stays derived from the transcript. A model may rewrite
+    // the prose, never the relationships between concepts.
+    const graph = { nodes: local.nodes, edges: local.edges };
 
     const result: VisualSummaryData = {
       title: local.title,

@@ -1,5 +1,4 @@
 import type { CaptionChunk, TranscriptItem } from "@/types";
-import { transcript } from "./transcript";
 
 /**
  * Burned-in live captions for the video stage, derived from the transcript
@@ -88,15 +87,12 @@ function toCaptionChunks(item: TranscriptItem): CaptionChunk[] {
 }
 
 /**
- * Derive caption chunks for any transcript — the built-in demo lesson, or
- * one produced live by speech recognition.
+ * Derive caption chunks for whichever transcript is running — live speech
+ * recognition, or a video's own captions.
  */
 export function buildCaptions(items: TranscriptItem[]): CaptionChunk[] {
   return items.flatMap(toCaptionChunks);
 }
-
-/** Captions for the built-in demo lesson. */
-export const captions: CaptionChunk[] = buildCaptions(transcript);
 
 /** The caption visible at `time`, with sub-second smoothing to prevent flicker between adjacent phrases. */
 export function getCaptionAt(

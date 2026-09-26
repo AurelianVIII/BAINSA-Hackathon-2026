@@ -1,0 +1,109 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>FocusAid — Technical Brief</title>
+<style>
+  @page { size: A4; margin: 14mm 15mm; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: "Segoe UI", Inter, -apple-system, system-ui, sans-serif;
+    color: #18181b; font-size: 9.6pt; line-height: 1.4; margin: 0;
+  }
+  h1 { font-size: 15pt; margin: 0; letter-spacing: -0.01em; }
+  .tagline { font-size: 9pt; color: #52525b; margin: 2px 0 0; }
+  .rule { height: 2px; background: #18181b; margin: 6px 0 9px; }
+  h2 { font-size: 9.1pt; margin: 9px 0 3px; letter-spacing: 0.05em; text-transform: uppercase; }
+  p { margin: 0 0 5px; }
+  code {
+    font-family: "Cascadia Mono", Consolas, monospace;
+    font-size: 8.5pt; background: #f4f4f5; padding: 0.5px 3px; border-radius: 3px;
+  }
+  .stack { font-size: 9pt; color: #3f3f46; margin-bottom: 8px; }
+  table.tiers { width: 100%; border-collapse: collapse; margin: 2px 0 6px; font-size: 8.9pt; }
+  table.tiers td { padding: 3.5px 7px; border-bottom: 1px solid #e4e4e7; vertical-align: top; }
+  table.tiers td.n { width: 14px; font-weight: 600; }
+  table.tiers td.what { width: 34%; }
+  .note {
+    border-left: 3px solid #18181b; background: #fafafa; padding: 7px 11px;
+    margin: 6px 0 0; border-radius: 0 4px 4px 0;
+  }
+</style>
+</head>
+<body>
+
+<h1>FocusAid &mdash; Technical Brief</h1>
+<p class="tagline">Built in 5 hours by four developers working in parallel on one repo.</p>
+<div class="rule"></div>
+
+<p class="stack">
+<strong>Stack:</strong> Next.js 16 (App Router, Turbopack) &middot; React 19 &middot; TypeScript &middot;
+Tailwind v4 &middot; MediaPipe Tasks-Vision &middot; transformers.js &middot; Anthropic SDK
+</p>
+
+<h2>One clock</h2>
+<p>
+<code>src/app/page.tsx</code> owns a single <code>currentTime</code>; transcript, captions, attention
+timeline and catch-up all derive from it. That, a frozen shared type contract, and ownership split by
+directory is what let four people build independently and still agree on what &ldquo;2:14&rdquo; means.
+</p>
+
+<h2>Attention &mdash; in-browser, nothing uploaded</h2>
+<p>
+MediaPipe Face Landmarker: 478 landmarks, 52 blendshapes, facial transformation matrices. Gaze-away
+from iris position in the eye socket; confusion from brow-lowerer blendshapes; head alignment from
+matrix element <code>d[10]</code> &mdash; index (2,2), the same cell under both row- and column-major
+layouts, so the read is transpose-invariant &mdash; divided by axis length to cancel scale. Events
+carry a 4-second floor so a glance never alerts, and <strong>an unobserved second ends a run rather
+than extending it</strong>: the system never claims the student was away during time it did not watch.
+</p>
+
+<h2>Transcription</h2>
+<p>
+Browser <code>SpeechRecognition</code>, continuous and self-restarting after silence, with phrases
+stamped from when speech <em>started</em> rather than when the engine committed them, so lines track
+the clock instead of lagging it. Captions are <em>derived</em> from the active transcript and cannot
+drift from it.
+</p>
+
+<h2>AI &mdash; three tiers, always degrading</h2>
+<table class="tiers">
+  <tr>
+    <td class="n">1</td>
+    <td class="what"><strong>Hosted model</strong> &middot; <code>/api/summary</code></td>
+    <td>Structured JSON against a fixed schema; 6s timeout, no retries. Falls to tier 3 on any error, refusal or malformed reply.</td>
+  </tr>
+  <tr>
+    <td class="n">2</td>
+    <td class="what"><strong>On-device</strong> &middot; SmolLM2-360M q4f16, WebGPU</td>
+    <td>transformers.js in a <strong>Web Worker</strong>, so generation never stutters caption rendering or the tracker. Opt-in, cached, offline after first load.</td>
+  </tr>
+  <tr>
+    <td class="n">3</td>
+    <td class="what"><strong>Deterministic</strong> &middot; from the transcript</td>
+    <td>Synchronous, renders the instant the student taps. Tiers 1&ndash;2 are upgrades layered on top; nothing stands between the request and an answer.</td>
+  </tr>
+</table>
+
+<div class="note">
+<p style="margin-bottom:4px"><strong>The on-device model selects; it never writes.</strong></p>
+<p style="margin-bottom:0">
+Asked to rewrite passages, SmolLM2-360M was faithful on <strong>0 of 6</strong> test windows &mdash; it
+inverted CO<sub>2</sub> for oxygen, carbon for sugar, light-dependent for light-independent. Qwen2.5-0.5B
+at 460&nbsp;MB was no better. Because our user cannot check generated text against audio, the model is
+now constrained to picking one of the teacher's own sentences, and every reply is matched against the
+source before display; non-verbatim output is discarded. Measured: <strong>5/6</strong> windows yield a
+verified key point, <strong>5/5</strong> verifier unit checks including a planted hallucination.
+Diagrams stay derived from the transcript, so no model can invent a relationship between concepts.
+</p>
+</div>
+
+<h2>Accessibility</h2>
+<p style="margin-bottom:0">
+ARIA tabs with roving tabindex and arrow/Home/End navigation; focus rings on every control;
+<code>prefers-reduced-motion</code> honoured globally; high-contrast captions; fuzzy transcript search;
+notes persisted via <code>useSyncExternalStore</code> for an SSR-safe read with no hydration flash.
+</p>
+
+</body>
+</html>

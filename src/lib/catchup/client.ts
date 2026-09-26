@@ -1,5 +1,4 @@
 import { generateCatchUp } from "./index";
-import { transcript } from "@/data/transcript";
 import type { CatchUpResult, TranscriptItem } from "@/types";
 
 const FETCH_TIMEOUT_MS = 4000;
@@ -7,21 +6,21 @@ const FETCH_TIMEOUT_MS = 4000;
 /**
  * Owned by the Catch-up feature team. Calls /api/catchup for an AI-condensed
  * summary, falling back to the local deterministic result on any error,
- * non-OK response, or if it takes longer than FETCH_TIMEOUT_MS — the demo
- * must never hang on a network call. `items` overrides the mock lesson
- * (e.g. a YouTube video's captions); only the lines in the window are sent.
+ * non-OK response, or if it takes longer than FETCH_TIMEOUT_MS — catching
+ * up must never hang on a network call. `items` is the lesson actually
+ * running; only the lines inside the window are sent.
  *
  * Shared by every catch-up entry point (the manual button, the "I'm looking
  * away" toggle) so there is exactly one fallback/timeout policy, not one per
  * button.
  */
 export async function fetchCatchUp(
-  items: TranscriptItem[] | undefined,
+  items: TranscriptItem[],
   start: number,
   end: number,
   title?: string
 ): Promise<CatchUpResult> {
-  const local = generateCatchUp(items ?? transcript, start, end, title);
+  const local = generateCatchUp(items, start, end, title);
   if (local.bullets.length === 0) return local;
 
   const controller = new AbortController();

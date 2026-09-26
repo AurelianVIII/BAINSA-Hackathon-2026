@@ -27,7 +27,7 @@ export function AwayCatchUp({
   items,
 }: {
   currentTime: number;
-  items?: TranscriptItem[];
+  items: TranscriptItem[];
 }) {
   const [awayFrom, setAwayFrom] = useState<number | null>(null);
   const [result, setResult] = useState<CatchUpResult | null>(null);
