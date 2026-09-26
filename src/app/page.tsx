@@ -5,52 +5,24 @@ import { Header } from "@/components/layout/Header";
 import { VideoPanel } from "@/components/video/VideoPanel";
 import { TranscriptPanel } from "@/components/transcript/TranscriptPanel";
 import { CatchUpButton } from "@/components/catchup/CatchUpButton";
+import { MissedAlert } from "@/components/catchup/MissedAlert";
 import { AttentionTracker } from "@/components/attention/AttentionTracker";
 import { AttentionTimeline } from "@/components/attention/AttentionTimeline";
 import { AiSummaryPanel } from "@/components/summary/AiSummaryPanel";
 import { VisualSummaryTab } from "@/components/summary/VisualSummaryTab";
 import { KeyMoments } from "@/components/threads/KeyMoments";
-import { Card } from "@/components/ui/Card";
 import { transcript } from "@/data/transcript";
 import { attentionEvents } from "@/data/attention-events";
 import { attentionSamples } from "@/data/attention-samples";
 import { getCaptionAt } from "@/data/captions";
 import { buildTimelineBands, getAttentionLevel, getSampleAt } from "@/lib/attention";
-import type { AttentionEventType, MissedWindow } from "@/types";
+import { buildMissedWindow, getPendingAlert } from "@/lib/catchup";
+import type { MissedWindow } from "@/types";
 
 const LESSON_DURATION = 300;
 
 /** Event types that mean the student actually lost the thread. */
-const MISSED_EVENT_TYPES: AttentionEventType[] = ["looking-away", "low-attention"];
-
-/** How long after a missed window the catch-up offer stays on screen. */
-const ALERT_VISIBLE_SECONDS = 30;
-
-/**
- * Expand missed-attention events to the transcript lines they overlap.
- *
- * Scaffolding: PC2 owns the real version (`buildMissedWindow` in
- * src/lib/catchup). This exists so the missed-line treatment and the
- * catch-up offer are demonstrable before PC2 merges — swap it out then.
- */
-function buildMissedWindows(): MissedWindow[] {
-  return attentionEvents
-    .filter((event) => MISSED_EVENT_TYPES.includes(event.type))
-    .map((event) => {
-      const overlapped = transcript.filter(
-        (item) => event.start < item.end && event.end > item.start
-      );
-
-      return {
-        id: event.id,
-        start: event.start,
-        end: event.end,
-        reason: event.type,
-        transcriptIds: overlapped.map((item) => item.id),
-        hitKeyContent: overlapped.some((item) => item.importance === "high"),
-      };
-    });
-}
+const MISSED_EVENT_TYPES = ["looking-away", "low-attention"] as const;
 
 /**
  * Composition layer for the lesson screen. `currentTime` is the single
@@ -91,20 +63,28 @@ export default function Home() {
   const attentionSample = getSampleAt(attentionSamples, currentTime);
   const attentionLevel = getAttentionLevel(attentionSample);
   const caption = getCaptionAt(currentTime);
-  const missedWindows = useMemo(() => buildMissedWindows(), []);
+  // Missed-line highlighting comes from PC2's buildMissedWindow, so the
+  // transcript marks exactly the lines their alert offers to explain.
   const missedIds = useMemo(
-    () => missedWindows.flatMap((window) => window.transcriptIds),
-    [missedWindows]
+    () =>
+      attentionEvents
+        .filter((event) =>
+          (MISSED_EVENT_TYPES as readonly string[]).includes(event.type)
+        )
+        .flatMap(
+          (event) =>
+            buildMissedWindow(attentionEvents, transcript, event).transcriptIds
+        ),
+    []
   );
 
-  // Surface the offer just after the student comes back, not during.
-  const activeAlert =
-    missedWindows.find(
-      (window) =>
-        currentTime >= window.end &&
-        currentTime < window.end + ALERT_VISIBLE_SECONDS &&
-        !dismissedAlertIds.includes(window.id)
-    ) ?? null;
+  // PC2 owns the "has the student just come back?" rule.
+  const activeAlert = getPendingAlert(
+    attentionEvents,
+    transcript,
+    currentTime,
+    dismissedAlertIds
+  );
   const timelineBands = useMemo(
     () => buildTimelineBands(attentionEvents, transcript, LESSON_DURATION),
     []
@@ -163,39 +143,15 @@ export default function Home() {
             level={attentionLevel}
           />
 
-          {/* Slot for PC2's <MissedAlert window onShowSummary onReplay
-              onDismiss />. Scaffolded here so the alert -> summary flow is
-              demonstrable; replace with their component when it lands. */}
-          {activeAlert && (
-            <Card className="border-purple-300 bg-purple-50 dark:border-purple-800 dark:bg-purple-950/40">
-              <p className="text-sm font-medium text-purple-900 dark:text-purple-100">
-                You looked away for {Math.round(activeAlert.end - activeAlert.start)}s
-                {activeAlert.hitKeyContent && " during key content"}.
-              </p>
-              <div className="mt-3 flex flex-wrap gap-2">
-                <button
-                  onClick={() => setSummaryRequest(activeAlert)}
-                  className="rounded-lg bg-purple-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-purple-500"
-                >
-                  Show me what I missed
-                </button>
-                <button
-                  onClick={() => handleSeek(activeAlert.start)}
-                  className="rounded-lg border border-purple-300 px-3 py-1.5 text-sm font-medium text-purple-800 hover:bg-purple-100 dark:border-purple-700 dark:text-purple-200 dark:hover:bg-purple-900"
-                >
-                  Replay
-                </button>
-                <button
-                  onClick={() =>
-                    setDismissedAlertIds((ids) => [...ids, activeAlert.id])
-                  }
-                  className="rounded-lg px-3 py-1.5 text-sm text-purple-700 hover:bg-purple-100 dark:text-purple-300 dark:hover:bg-purple-900"
-                >
-                  Dismiss
-                </button>
-              </div>
-            </Card>
-          )}
+          <MissedAlert
+            window={activeAlert}
+            onShowSummary={(window: MissedWindow) => setSummaryRequest(window)}
+            onReplay={handleSeek}
+            onDismiss={() =>
+              activeAlert &&
+              setDismissedAlertIds((ids) => [...ids, activeAlert.id])
+            }
+          />
 
           <CatchUpButton currentTime={currentTime} />
 

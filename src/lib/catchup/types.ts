@@ -1,16 +1,9 @@
-import type { AttentionEventType } from "@/types";
-
 /**
- * Feature-local until PC1 lands the shared `src/types/index.ts` additive
- * block (see ROADMAP.md §2) with the same shape — swap the import then.
+ * Owned by the Catch-up feature team.
+ *
+ * PC1 has now landed the shared contract (c08f12f) with the same shape,
+ * so this re-exports it rather than holding a second definition that
+ * could drift. Both importers keep working unchanged.
  */
-export interface MissedWindow {
-  id: string;
-  start: number;
-  end: number;
-  reason: AttentionEventType;
-  /** TranscriptItem ids overlapping the window. */
-  transcriptIds: string[];
-  /** True if any overlapped item has importance: "high". */
-  hitKeyContent: boolean;
-}
+
+export type { MissedWindow } from "@/types";
