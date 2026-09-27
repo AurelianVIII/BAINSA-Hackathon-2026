@@ -6,11 +6,11 @@ import { SummaryFlowchart } from "@/components/summary/SummaryFlowchart";
 import { buildVisualSummary, getItemsInWindow } from "@/lib/summary";
 import type { MissedWindow, VisualSummaryData } from "@/lib/summary/types";
 import type { TranscriptItem } from "@/types";
-import { highlight } from "@/lib/ai/local-model";
-import { useLocalModel } from "@/lib/ai/useLocalModel";
 import { extractKeyFocusPoint, synthesizePassage } from "@/lib/ai/smart-summarizer";
+import { generateSummary } from "@/lib/ai/webllm-client";
+import { useAutoLoadWebLLM } from "@/lib/ai/useWebLLM";
 
-/** How long to wait for the AI summary before staying with the local one. */
+/** How long to wait for the server AI summary before staying with the local one. */
 const AI_TIMEOUT_MS = 4000;
 
 function formatTime(seconds: number) {
@@ -37,14 +37,13 @@ function SparkleIcon({ className = "h-3 w-3" }: { className?: string }) {
 /**
  * Owned by the Summaries/Threads feature team (PC4).
  *
- * The payoff panel: turns a missed window into a short written summary
- * and a diagram. The summary is computed synchronously so it renders the
- * instant the student asks — every model path is an enhancement layered
- * on top, never something standing between the click and the answer.
+ * Three-tier summary sources:
+ * 1. WebGPU LLM (in-browser, real generative AI via web-llm)
+ * 2. Server API (Claude via Anthropic API, if key is set)
+ * 3. Local smart summarizer (rule-based fallback, always instant)
  *
- * Three sources, in descending preference: the hosted model, the
- * on-device model, and the deterministic summary built from the teacher's
- * own words. The badge always names which one is on screen.
+ * The local summary renders immediately. WebGPU and server results
+ * replace it as they arrive. The badge shows which source is active.
  */
 export function AiSummaryPanel({
   request,
@@ -52,7 +51,6 @@ export function AiSummaryPanel({
   lessonTitle,
 }: {
   request: MissedWindow | null;
-  /** The lesson actually playing — live speech or a video's captions. */
   items: TranscriptItem[];
   lessonTitle?: string;
 }) {
@@ -62,27 +60,16 @@ export function AiSummaryPanel({
     [request, lesson, lessonTitle]
   );
 
-  // Keyed by request id rather than reset on change, so switching windows
-  // never shows the previous window's AI text and the effect never has to
-  // clear state synchronously.
   const [ai, setAi] = useState<{
     id: string;
     data: VisualSummaryData;
-    fromModel: boolean;
+    source: "webgpu" | "server" | "local";
   } | null>(null);
-  const [device, setDevice] = useState<{ id: string; text: string } | null>(
-    null
-  );
 
-  const model = useLocalModel();
+  // Auto-load the WebGPU LLM on mount
+  const webllm = useAutoLoadWebLLM();
 
-  // Bring the panel into view when a summary is asked for. The right column
-  // scrolls, and the panel sits below the alert that triggered it — without
-  // this the student clicks "Show me a summary" and sees only the heading.
   const panelRef = useRef<HTMLDivElement>(null);
-  // A live transcript grows with every phrase spoken. Read it through refs
-  // so the work below is triggered by a new request only, and does not
-  // re-fire each time another line is transcribed.
   const itemsRef = useRef(items);
   const lessonRef = useRef(lesson);
   const titleRef = useRef(lessonTitle);
@@ -94,19 +81,41 @@ export function AiSummaryPanel({
 
   useEffect(() => {
     if (!request) return;
-
-    const reduced = window.matchMedia(
-      "(prefers-reduced-motion: reduce)"
-    ).matches;
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
     panelRef.current?.scrollIntoView({
       behavior: reduced ? "auto" : "smooth",
       block: "start",
     });
   }, [request]);
 
+  // Try WebGPU LLM first, then server API
   useEffect(() => {
     if (!request) return;
+    let cancelled = false;
 
+    const passage = getItemsInWindow(lessonRef.current, request)
+      .map((item) => item.text)
+      .join(" ");
+
+    // 1. Try WebGPU LLM (in-browser)
+    if (webllm.status === "ready" && passage.trim()) {
+      generateSummary(passage, titleRef.current).then((text) => {
+        if (!cancelled && text) {
+          setAi({
+            id: request.id,
+            data: {
+              title: local?.title ?? "What you missed",
+              text,
+              nodes: local?.nodes ?? [],
+              edges: local?.edges ?? [],
+            },
+            source: "webgpu",
+          });
+        }
+      });
+    }
+
+    // 2. Try server API (in parallel, may arrive first if WebGPU is still loading)
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), AI_TIMEOUT_MS);
 
@@ -121,66 +130,44 @@ export function AiSummaryPanel({
       }),
       signal: controller.signal,
     })
-      .then((response) => (response.ok ? response.json() : null))
+      .then((r) => (r.ok ? r.json() : null))
       .then((result) => {
-        if (result?.text) {
-          setAi({
-            id: request.id,
-            data: result as VisualSummaryData,
-            fromModel: result.source === "ai",
+        if (!cancelled && result?.text) {
+          // Only use server result if we don't already have a WebGPU result
+          setAi((prev) => {
+            if (prev?.id === request.id && prev.source === "webgpu") return prev;
+            return {
+              id: request.id,
+              data: result as VisualSummaryData,
+              source: "server",
+            };
           });
         }
       })
-      .catch(() => {
-        // Aborted or offline — the local summary is already rendered.
-      })
+      .catch(() => {})
       .finally(() => clearTimeout(timer));
 
     return () => {
+      cancelled = true;
       clearTimeout(timer);
       controller.abort();
     };
-  }, [request]);
+  }, [request, webllm.status, local]);
 
-  // Local & On-device pass. Provides an instant, reliable local AI Key Focus Point
-  // immediately, and enhances it via the on-device model when ready.
-  useEffect(() => {
-    if (!request) return;
+  const active = ai && request && ai.id === request.id ? ai : null;
+  const data = active?.data ?? local;
+  const text = active ? active.data.text : (local?.text ?? "");
 
-    const passage = getItemsInWindow(lessonRef.current, request)
-      .map((item) => item.text)
-      .join(" ");
-    if (!passage) return;
-
-    // Immediately supply high-quality local AI focus point
-    const initialFocus = extractKeyFocusPoint(passage, titleRef.current);
-    setDevice({ id: request.id, text: initialFocus });
-
-    if (model.status === "ready") {
-      let cancelled = false;
-      highlight(passage).then((text) => {
-        if (!cancelled && text) {
-          setDevice({ id: request.id, text: synthesizePassage(text, titleRef.current) });
-        }
-      });
-
-      return () => {
-        cancelled = true;
-      };
-    }
-  }, [request, model.status]);
-
-  const server = ai && request && ai.id === request.id ? ai : null;
-  const serverAi = server?.data ?? null;
-  const onDevice = device && request && device.id === request.id ? device : null;
-
-  const data = serverAi ?? local;
-  const text = serverAi ? serverAi.text : (local?.text ?? "");
-
-  const badge = {
-    label: "AI",
-    title: server?.fromModel ? "Generated by Claude AI" : "AI summary",
-  };
+  const badgeLabel = active?.source === "webgpu"
+    ? "WebGPU AI"
+    : active?.source === "server"
+      ? "AI"
+      : "AI";
+  const badgeTitle = active?.source === "webgpu"
+    ? "Generated by in-browser LLM via WebGPU"
+    : active?.source === "server"
+      ? "Generated by cloud AI"
+      : "AI summary";
 
   if (!request || !data) {
     return (
@@ -193,6 +180,19 @@ export function AiSummaryPanel({
             <p className="text-sm text-zinc-400 dark:text-zinc-500">
               Summaries appear here when you miss something.
             </p>
+            {webllm.status === "loading" && (
+              <div className="mt-2 w-full max-w-xs">
+                <p className="text-xs text-zinc-400 dark:text-zinc-500">
+                  Loading AI model… {webllm.progress != null ? `${Math.round(webllm.progress * 100)}%` : ""}
+                </p>
+                <div className="mt-1 h-1.5 w-full overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-700">
+                  <div
+                    className="h-full rounded-full bg-indigo-500 transition-all duration-300"
+                    style={{ width: `${(webllm.progress ?? 0) * 100}%` }}
+                  />
+                </div>
+              </div>
+            )}
           </div>
         </Card>
       </div>
@@ -206,11 +206,11 @@ export function AiSummaryPanel({
           <span className="flex items-center justify-between gap-2">
             <span>AI Summary of the missed part</span>
             <span
-              title={badge.title}
+              title={badgeTitle}
               className="flex shrink-0 items-center gap-1 rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-medium normal-case text-zinc-700 dark:bg-zinc-800 dark:text-zinc-300"
             >
               <SparkleIcon />
-              {badge.label}
+              {badgeLabel}
             </span>
           </span>
         }
@@ -222,17 +222,6 @@ export function AiSummaryPanel({
         <p className="mt-2 text-base leading-relaxed text-zinc-700 dark:text-zinc-200">
           {text}
         </p>
-
-        {onDevice && (
-          <div className="mt-3 rounded-lg border-l-2 border-emerald-500 bg-zinc-50 py-2 pl-3 pr-2 dark:border-emerald-400 dark:bg-zinc-950/60">
-            <span className="text-[10px] font-medium uppercase tracking-wide text-zinc-500 dark:text-zinc-400">
-              Key Focus Point
-            </span>
-            <p className="mt-0.5 text-sm leading-relaxed text-zinc-800 dark:text-zinc-100">
-              {synthesizePassage(onDevice.text, lessonTitle)}
-            </p>
-          </div>
-        )}
 
         {data.nodes.length > 0 && (
           <div className="mt-4 rounded-lg border border-zinc-100 bg-zinc-50/60 p-3 dark:border-zinc-800 dark:bg-zinc-950/40">
